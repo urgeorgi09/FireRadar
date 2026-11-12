@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install API deps
+        run: npm ci
+        working-directory: api
+
+      - name: Run API tests
+        run: npm test
+        working-directory: api
+
+      - name: Build API
+        run: npm run build
+        working-directory: api
+
+      - name: Install web deps
+        run: npm ci
+        working-directory: web
+
+      - name: Lint web
+        run: npm run lint
+        working-directory: web
+
+      - name: Build web
+        run: npm run build
+        working-directory: web
+
+      - name: Build API image
+        run: docker build -f api/Dockerfile.compose -t fireradar-api:ci .
+
+      - name: Build web image
+        run: docker build -t fireradar-web:ci ./web

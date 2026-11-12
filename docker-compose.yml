@@ -1,0 +1,88 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: fireradar
+      POSTGRES_USER: fireradar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a strong POSTGRES_PASSWORD in the root .env file}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./api/src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./api/src/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fireradar -d fireradar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.compose
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      DATABASE_URL: postgres://fireradar:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}@db:5432/fireradar
+      JWT_SECRET: ${JWT_SECRET:?Set a strong JWT_SECRET in the root .env file}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://fireradar-bg.org,https://www.fireradar-bg.org,https://admin.fireradar-bg.org}
+      TRUST_PROXY: ${TRUST_PROXY:-172.30.0.2}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      FIRMS_MAP_KEY: ${FIRMS_MAP_KEY:-}
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - edge
+    volumes:
+      - ./data:/app/data:ro
+      - ./ml:/app/ml:ro
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - api
+    networks:
+      - internal
+      - edge
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["production"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    networks:
+      edge:
+        ipv4_address: 172.30.0.2
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

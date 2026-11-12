@@ -1,0 +1,33 @@
+{
+  "features": [
+    "temp",
+    "humidity",
+    "wind_speed",
+    "precip",
+    "fwi",
+    "ffmc",
+    "dmc",
+    "dc",
+    "isi",
+    "bui",
+    "veg_type",
+    "fwi_lag1",
+    "fwi_lag2",
+    "fwi_lag3",
+    "temp_lag1",
+    "temp_lag2",
+    "temp_lag3",
+    "precip_lag1",
+    "precip_lag2",
+    "precip_lag3"
+  ],
+  "risk_thresholds": {
+    "moderate": 0.2151692390631995,
+    "high": 0.2221561465795884,
+    "extreme": 0.22889664555275177
+  },
+  "risk_semantics": "relative",
+  "training_resolution": "0.1-degree map cells",
+  "cell_count": 1358,
+  "test_fire_prevalence": 0.0036154904753856925
+}

@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+**/.DS_Store
+**/__pycache__
+**/*.pyc
+data/
+tmp_replay.json
