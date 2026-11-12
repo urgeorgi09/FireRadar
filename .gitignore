@@ -7,3 +7,5 @@ data/clc_polygon_centroids.json
 *.log
 **/.env
 data/clc2018_bgr.geojson
+__pycache__/
+*.pyc
