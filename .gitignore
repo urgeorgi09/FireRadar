@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 data/*.csv
+data.tar.gz
 data/*.tif
 data/clc_polygon_centroids.json
 *.log
