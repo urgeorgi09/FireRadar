@@ -1,21 +1,31 @@
+{
+    # Изключваме автоматичните TLS сертификати, понеже Cloudflare тунелът прекратява SSL
+    auto_https off
+}
+
 (fireradar) {
-	handle_path /api/* {
-		reverse_proxy api:3000
-	}
+    # Доверяваме се на прокси заглавките от тунела/мрежата
+    trusted_proxies private_ranges
 
-	handle /docs* {
-		reverse_proxy api:3000
-	}
+    handle_path /api/* {
+        reverse_proxy api:3000 {
+            header_up X-Forwarded-For {http.request.header.CF-Connecting-Ip}
+        }
+    }
 
-	handle {
-		reverse_proxy web:80
-	}
+    handle /docs* {
+        reverse_proxy api:3000 {
+            header_up X-Forwarded-For {http.request.header.CF-Connecting-Ip}
+        }
+    }
+
+    handle {
+        reverse_proxy web:80 {
+            header_up X-Forwarded-For {http.request.header.CF-Connecting-Ip}
+        }
+    }
 }
 
-fireradar-bg.org, www.fireradar-bg.org {
-	import fireradar
-}
-
-admin.fireradar-bg.org {
-	import fireradar
+:80 {
+    import fireradar
 }

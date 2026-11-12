@@ -58,12 +58,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    profiles: ["production"]
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -74,6 +69,15 @@ services:
     networks:
       edge:
         ipv4_address: 172.30.0.2
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    depends_on:
+      - caddy
+    networks:
+      - edge
 
 volumes:
   pgdata:
