@@ -1,12 +1,9 @@
 {
-    # Изключваме автоматичните TLS сертификати, понеже Cloudflare тунелът прекратява SSL
+    # Cloudflare тунелът прекратява HTTPS, затова Caddy слуша само HTTP
     auto_https off
 }
 
 (fireradar) {
-    # Доверяваме се на прокси заглавките от тунела/мрежата
-    trusted_proxies private_ranges
-
     handle_path /api/* {
         reverse_proxy api:3000 {
             header_up X-Forwarded-For {http.request.header.CF-Connecting-Ip}
