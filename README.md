@@ -4,7 +4,7 @@
 
 **FireRadar е система за наблюдение и ранно предупреждение при горски пожари в България.**
 
-> **Демонстрация:** публичната система все още не е достъпна онлайн. Адресите `fireradar-bg.org` и `admin.fireradar-bg.org` са планирани, но към момента DNS не е настроен. Приложението може да се стартира локално по инструкциите по-долу.
+> **Жива демонстрация:** [fireradar-bg.org/map](https://fireradar-bg.org/map). Екипният вход е на [admin.fireradar-bg.org](https://admin.fireradar-bg.org). Публичният сайт се обслужва през Cloudflare с HTTPS.
 
 ## Проблем и решение
 
@@ -35,11 +35,13 @@
 
 ## Технологии и архитектура
 
-**React · TypeScript · MapLibre · Fastify · PostgreSQL/PostGIS · Python · LightGBM · ONNX · Docker Compose**
+**React · TypeScript · MapLibre · Fastify · PostgreSQL/PostGIS · Python · LightGBM · ONNX · Docker Compose · Cloudflare Tunnel**
 
 ```mermaid
 flowchart LR
-    Visitor[Гражданин или екип] --> Proxy[Caddy reverse proxy]
+    Visitor[Гражданин или екип] --> CF[Cloudflare HTTPS]
+    CF --> Tunnel[Cloudflare Tunnel]
+    Tunnel --> Proxy[Caddy reverse proxy]
     Proxy --> Web[React уеб приложение]
     Proxy --> API[Fastify API]
     API --> DB[(PostgreSQL / PostGIS)]
@@ -166,15 +168,16 @@ GitHub Actions изпълнява API тестове и компилация, we
 ## Ограничения
 
 - ML резултатът е **относителен риск**, а не калибрирана абсолютна вероятност за пожар. Метриките и методологията са описани в [резултатите от ML модела](results.md).
+- Метеорологичните данни се вземат от представителни точки през приблизително 0,5° географска мрежа и клетките използват данните от най-близката точка. Затова съседни области могат да имат еднакви входни метеорологични стойности и по картата да се виждат правилни на вид цветни зони; това е ограничение на пространствената резолюция, не доказателство за еднакви локални условия. По-гъста метеорологична мрежа или интерполация е възможна следваща стъпка.
 - NASA FIRMS показва сателитни hotspot засичания; те могат да включват и непожарни източници и не представляват потвърден пожар. Наличието на живи точки зависи от валиден `FIRMS_MAP_KEY`.
 - Наблюдателните кули, сигналите от тях и дроновете са демо/симулационни данни; няма връзка с физически устройства или реална диспечерска система.
 - Данните и моделът подпомагат наблюдение и демонстрация, но не трябва да се използват като единствена основа за реални действия при пожар. При опасност се свържете с официалните служби.
 
-## Production deployment
+## Публикувана демонстрация и deployment
 
-Планираните production адреси са `https://fireradar-bg.org`, `https://admin.fireradar-bg.org` и по избор `https://www.fireradar-bg.org`. Те **не са активни към момента**. Не стартирайте публичен deployment, преди да са готови сървърът, DNS, тайните, Turnstile и акаунтите.
+Живата демонстрация е достъпна на [fireradar-bg.org](https://fireradar-bg.org/map), а екипният панел — на [admin.fireradar-bg.org](https://admin.fireradar-bg.org). Production трафикът минава през Cloudflare HTTPS и Cloudflare Tunnel към Caddy; Caddy препраща заявките към web приложението и API. Конфигурацията за тунела е в [docker-compose.yml](docker-compose.yml), а вътрешното маршрутизиране — в [Caddyfile](Caddyfile).
 
-Production `.env` трябва да съдържа отделни, силни тайни:
+За ново или възстановено production разгръщане използвайте сървърни, уникални тайни в `.env`:
 
 ```env
 JWT_SECRET=<нова-дълга-случайна-тайна>
@@ -183,18 +186,18 @@ ALLOWED_ORIGINS=https://fireradar-bg.org,https://www.fireradar-bg.org,https://ad
 VITE_TURNSTILE_SITE_KEY=<Turnstile-site-key>
 TURNSTILE_SECRET_KEY=<Turnstile-secret-key>
 FIRMS_MAP_KEY=<NASA-FIRMS-map-key>
+TUNNEL_TOKEN=<Cloudflare-Tunnel-token>
 ```
 
-1. Насочете DNS `A` записите за production адресите към публичния IP на Docker сървъра. Проверете IPv6 `AAAA`, ако се използва.
-2. Разрешете входящ TCP трафик към портове 80 и 443 (UDP 443 е незадължителен за HTTP/3).
-3. Добавете production hostnames към настройките на Turnstile и създайте администраторски и диспечерски акаунти чрез provisioning скрипта.
-4. Стартирайте Caddy production профила едва след проверка на DNS, тайните и firewall-а:
+1. Настройте hostname маршрутите в Cloudflare Tunnel към Caddy на порт 80 и добавете production hostnames към настройките на Turnstile.
+2. Създайте администраторски и диспечерски акаунти чрез provisioning скрипта.
+3. Проверете `.env` и стартирайте услугите:
 
    ```bash
-   docker compose --profile production up --build -d
+   docker compose up --build -d
    ```
 
-Caddy издава и подновява HTTPS сертификатите. Контейнерите за API и web са публикувани само на loopback адреса на сървъра; публичният трафик трябва да минава през Caddy. Не използвайте примерни стойности за тайни и не пренасяйте локалния `ALLOWED_ORIGINS` в production.
+Cloudflare прекратява HTTPS връзката, а Caddy слуша вътрешно по HTTP през Docker мрежата. Не отваряйте директно Caddy, API или PostgreSQL към интернет и не използвайте примерни стойности за тайни. Не пренасяйте локалния `ALLOWED_ORIGINS` в production.
 
 `FIRMS_MAP_KEY` се използва от API за почасово изтегляне на последните два дни VIIRS данни от Suomi-NPP, NOAA-20 и NOAA-21. След промяна на ключа пресъздайте API контейнера. Без него историческите данни и останалите API функции продължават да работят, но живите сателитни точки няма да се обновяват.
 
