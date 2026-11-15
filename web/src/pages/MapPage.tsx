@@ -162,9 +162,17 @@ export default function MapPage() {
     const map = new maplibregl.Map({
       container: mapRef.current,
       style: getBasemapStyle(theme),
+      attributionControl: false,  // добавяме ръчно с compact
       ...(mapViewRef.current ?? { center: [25.5, 42.7] as [number, number], zoom: 7, bearing: 0, pitch: 0 }),
     })
     map.addControl(new maplibregl.NavigationControl())
+    // Компактна атрибуция — затворена по подразбиране (само иконка)
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
+    map.on('load', () => {
+      // Махаме отворения клас след load — остава само иконката
+      const attrib = mapRef.current?.querySelector('.maplibregl-ctrl-attrib')
+      attrib?.classList.remove('maplibregl-compact-show')
+    })
     mapInstance.current = map
     return () => {
       const center = map.getCenter()

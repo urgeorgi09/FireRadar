@@ -159,6 +159,21 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
   .maplibregl-ctrl-group { display: flex !important; }
 }
 
+/* Alert coords — desktop vs mobile */
+.alert-coords-desktop { display: flex; gap: 0.4rem; }
+.alert-coords-mobile { display: none; }
+.alert-selected-place {
+  font-size: 0.85rem; color: var(--text); margin-bottom: 0.5rem;
+  display: flex; align-items: center; gap: 0.3rem;
+}
+@media (max-width: 768px) {
+  .alert-coords-desktop { display: none; }
+  .alert-coords-mobile { display: block; }
+}
+
+/* Turnstile — на цялата ширина */
+.cf-turnstile { width: 100% !important; }
+
 /* MapLibre атрибуция — компактна, затворена иконка, без бяла кутия */
 .maplibregl-ctrl-attrib {
   background: transparent !important;

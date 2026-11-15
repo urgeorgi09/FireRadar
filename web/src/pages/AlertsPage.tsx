@@ -84,7 +84,12 @@ export default function AlertsPage() {
     const map = new maplibregl.Map({
       container: mapRef.current,
       style: getBasemapStyle(theme),
+      attributionControl: false,  // добавяме ръчно с compact
       ...(mapViewRef.current ?? { center: [25.5, 42.7] as [number, number], zoom: 6.5, bearing: 0, pitch: 0 }),
+    })
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
+    map.on('load', () => {
+      mapRef.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
     })
     mapInstance.current = map
     map.on('click', (e) => {
@@ -146,22 +151,30 @@ export default function AlertsPage() {
             {locating ? '⌛ Намиране…' : (<><Icon name="map-pin" size={18} /> Използвай моето местоположение</>)}
           </button>
 
-          {/* Координати — read-only, само за четене */}
-          <div className="alert-coords" style={{ marginBottom: '0.5rem' }}>
+          {/* Координати — на компютър: две полета, на мобилни: един ред "Избрано място" */}
+          <div className="alert-coords-desktop" style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
             <input
-              placeholder="Географска ширина"
+              placeholder="Ширина"
               value={lat ? `${lat}°N` : ''}
               readOnly
               style={{ flex: 1, opacity: lat ? 1 : 0.4 }}
               aria-label="Географска ширина"
             />
             <input
-              placeholder="Географска дължина"
+              placeholder="Дължина"
               value={lon ? `${lon}°E` : ''}
               readOnly
               style={{ flex: 1, opacity: lon ? 1 : 0.4 }}
               aria-label="Географска дължина"
             />
+          </div>
+          {/* На мобилни: един ред с избраното място */}
+          <div className="alert-coords-mobile">
+            {lat && lon ? (
+              <p className="alert-selected-place"><Icon name="map-pin" size={16} /> Избрано място: {lat}°N, {lon}°E</p>
+            ) : (
+              <p className="alert-selected-place" style={{ opacity: 0.5 }}>Местоположението не е избрано</p>
+            )}
           </div>
 
           <textarea
