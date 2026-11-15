@@ -796,6 +796,14 @@ export default function MapPage() {
               {lastUpdateTime ? `Обновено: ${formatTime(lastUpdateTime)}` : 'Няма данни за час на обновяване'}
             </p>
           )}
+          <a
+            className="legend-source-link"
+            href="https://github.com/urgeorgi09/FireRadar"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Изходен код (AGPL-3.0)
+          </a>
         </div>
       </div>
     </div>

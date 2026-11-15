@@ -1,3 +1,6 @@
+// FireRadar, Copyright (C) 2026 Георги Урумов
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'

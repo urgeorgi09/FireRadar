@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
 import { useAuth } from './hooks/authContext'
 import LoginPage      from './pages/LoginPage'
@@ -14,6 +14,7 @@ import { getAdminUrl, isAdminHost } from './utils/hosts'
 function Inner() {
   const { token, role, logout } = useAuth()
   const adminHost = isAdminHost()
+  const isMapPage = useLocation().pathname === '/map'
 
   useEffect(() => {
     if (adminHost && token && role !== 'admin' && role !== 'dispatcher') logout()
@@ -49,6 +50,15 @@ function Inner() {
           <Route path="*" element={<Navigate to="/map" />} />
         </Routes>
       )}
+      <footer className={`app-footer${isMapPage ? ' app-footer-map' : ''}`}>
+        <a
+          href="https://github.com/urgeorgi09/FireRadar"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Изходен код (AGPL-3.0)
+        </a>
+      </footer>
     </div>
   )
 }

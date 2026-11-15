@@ -5,7 +5,7 @@
 **Система за наблюдение и оценка на пожарния риск в България, с граждански сигнали и диспечерски панел.**
 
 [![CI](https://github.com/urgeorgi09/FireRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/urgeorgi09/FireRadar/actions/workflows/ci.yml)
-![Лиценз](https://img.shields.io/badge/Лиценз-MIT-22d3ee?style=flat-square)
+![Лиценз](https://img.shields.io/badge/Лиценз-AGPL--3.0-22d3ee?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
 ![PostGIS](https://img.shields.io/badge/PostgreSQL-PostGIS-336791?style=flat-square&logo=postgresql&logoColor=white)
@@ -245,7 +245,9 @@ docker compose up --build -d
 
 ## Лиценз и източници
 
-Кодът е под лиценза [MIT](LICENSE). Данните принадлежат на съответните доставчици (NASA FIRMS, Open-Meteo, Copernicus, GADM) и се ползват при техните условия.
+Кодът е под лиценза [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). Можете да го ползвате, изучавате, променяте и споделяте. Ако разпространявате променена версия или я пускате като мрежова услуга, трябва да направите изходния код на промените достъпен под същия лиценз.
+
+Данните принадлежат на съответните доставчици (NASA FIRMS, Open-Meteo, Copernicus, GADM) и се ползват при техните условия.
 
 Литература: Van Wagner, C. E. (1987), *Development and Structure of the Canadian Forest Fire Weather Index System*; Ke, G. и др. (2017), *LightGBM: A Highly Efficient Gradient Boosting Decision Tree*.
 

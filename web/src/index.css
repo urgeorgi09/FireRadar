@@ -68,8 +68,14 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 /* Content padding when bottom nav visible (mobile) */
 .has-bottom-nav { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
 
+/* Source code link */
+.app-footer { flex-shrink: 0; padding: 0.35rem 1rem; text-align: center; }
+.app-footer a, .legend-source-link { color: var(--muted); font-size: 0.72rem; text-decoration: none; }
+.app-footer a:hover, .legend-source-link:hover { color: var(--primary); text-decoration: underline; }
+.legend-source-link { display: none; }
+
 /* Login */
-.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+.login-page { display: flex; flex: 1; align-items: center; justify-content: center; min-height: 0; padding: 1rem; }
 .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2.5rem; width: 100%; max-width: 400px; text-align: center; }
 .login-logo { display: flex; justify-content: center; color: var(--primary); margin-bottom: 0.5rem; }
 .login-card h1 { font-size: 1.8rem; color: var(--primary); margin-bottom: 0.25rem; }
@@ -238,6 +244,8 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 @media (max-width: 768px) {
   /* ── Bottom nav видима ──────────────────────────────────────────────────── */
   .bottom-nav { display: block; }
+  .app-footer-map { display: none; }
+  .legend-source-link { display: inline-block; margin-top: 0.4rem; }
 
   /* ── Top navbar: само логото + тема ────────────────────────────────────── */
   .navbar { padding: 0 0.75rem; height: 50px; }
