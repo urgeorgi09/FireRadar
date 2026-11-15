@@ -99,11 +99,12 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   padding: 0.6rem 0.9rem; z-index: 10; max-width: 96vw;
 }
-.mode-tabs { display: flex; gap: 0.3rem; }
+.mode-tabs { display: flex; gap: 0.3rem; width: 100%; }
 .mode-tabs button {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
   background: var(--bg); border: 1px solid var(--border); color: var(--muted);
   padding: 4px 12px; border-radius: 6px; font-size: 0.82rem; cursor: pointer; transition: all 0.15s;
+  flex: 1; min-height: 36px;
 }
 .mode-tabs button.active { color: white; }
 .mode-tabs button.active-live { background: #16a34a; border-color: #16a34a; }
@@ -138,6 +139,36 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 .meteo-error-banner { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 0.4rem; background: #92400e; color: #fef3c7; padding: 6px 1rem; font-size: 0.8rem; text-align: center; z-index: 15; }
 .replay-overlay { position: absolute; top: 0; left: 0; right: 0; text-align: center; background: rgba(249,115,22,0.12); border-bottom: 1px solid var(--primary); padding: 4px; font-size: 0.78rem; color: var(--primary); font-weight: 600; pointer-events: none; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+/* Колапсируема легенда на мобилни */
+.legend-toggle { display: none; cursor: pointer; }
+@media (max-width: 768px) {
+  .legend-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .legend-collapsed .legend-extra { display: none; }
+}
+
+/* Скриване на зуум бутони на touch устройства */
+@media (pointer: coarse) {
+  .maplibregl-ctrl-group:not(.maplibregl-ctrl-attrib) { display: none !important; }
+  .maplibregl-ctrl-attrib { display: flex !important; }
+  /* По-тънки и по-прозрачни линии на клетките на touch */
+  .map-page .maplibregl-canvas { touch-action: pan-x pan-y; }
+}
+/* Покажи отново на хибридни устройства */
+@media (hover: hover) and (pointer: fine) {
+  .maplibregl-ctrl-group { display: flex !important; }
+}
+
+/* Desktop-only заглавие в легендата */
+.legend-desktop-title { display: block; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.04em; }
+@media (max-width: 768px) {
+  .legend-desktop-title { display: none; }
+  .legend-toggle h3 { font-size: 0.72rem; margin: 0; }
+  .legend-extra { margin-top: 0.4rem; }
+  /* Картата ≥70% от екрана при свита легенда */
+  .legend-collapsed { padding: 0.35rem 0.6rem; }
+  .legend-collapsed .legend-levels { margin-top: 0; }
+}
 
 /* Alerts */
 .alerts-page { padding: 1.5rem; max-width: 800px; margin: 0 auto; }

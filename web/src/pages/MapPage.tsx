@@ -51,6 +51,7 @@ export default function MapPage() {
   const [windSpeed, setWindSpeed]       = useState(20)
   const [isPickingCell, setIsPickingCell] = useState(false)
   const [isSimPlaying, setIsSimPlaying] = useState(false)
+  const [legendExpanded, setLegendExpanded] = useState(false)  // свита по подразбиране на мобилни
   const [clockNow, setClockNow] = useState(() => Date.now())
   const simStepRef = useRef(0)
   const simTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -605,6 +606,7 @@ export default function MapPage() {
 
       {/* ── Toolbar ── */}
       <div className="map-toolbar">
+        {/* Сегментиран контрол — един ред, цяла ширина */}
         <div className="mode-tabs">
           <button className={mode === 'live' ? 'active active-live' : ''} onClick={() => switchMode('live')}>
             <Icon name="radio" size={15} /> Живо
@@ -617,12 +619,14 @@ export default function MapPage() {
           </button>
         </div>
 
-        {/* Бутон Демо сценарий — винаги видим */}
-        <button className="btn-demo" onClick={handleDemoScenario} disabled={demoLoading} title="Покажи деня с най-много FIRMS засичания от 2024 г. насам">
-          {demoLoading
-            ? <><span className="loading-spinner-small" /> Зареждам...</>
-            : <><Icon name="play" size={15} /> Демо сценарий</>}
-        </button>
+        {/* Демо сценарий — само в режим Повторение, малък бутон */}
+        {mode === 'replay' && (
+          <button className="btn-demo" onClick={handleDemoScenario} disabled={demoLoading} title="Покажи деня с най-много FIRMS засичания от 2024 г. насам">
+            {demoLoading
+              ? <><span className="loading-spinner-small" /> Зареждам...</>
+              : <><Icon name="play" size={15} /> Демо сценарий</>}
+          </button>
+        )}
 
         {/* Replay controls */}
         {mode === 'replay' && (
@@ -691,27 +695,25 @@ export default function MapPage() {
         )}
       </div>
 
-      {/* ── Легенда ── */}
-      <div className="legend">
-        {/* Режим badge */}
-        <div className={`mode-badge mode-badge-${mode}`}>
-          <span className="icon-heading">
-            <Icon name={mode === 'live' ? 'radio' : mode === 'replay' ? 'history' : 'flame'} size={14} />
-            {mode === 'live' ? 'ЖИВО' : mode === 'replay' ? activeReplayDate || 'ПОВТОРЕНИЕ' : 'СИМУЛАЦИЯ'}
-          </span>
+      {/* ── Легенда (колапсируема на мобилни) ── */}
+      <div className={`legend ${!legendExpanded ? 'legend-collapsed' : ''}`}>
+        {/* Toggle header — само на мобилни */}
+        <div
+          className="legend-toggle"
+          onClick={() => setLegendExpanded(!legendExpanded)}
+          aria-expanded={legendExpanded}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setLegendExpanded(!legendExpanded) }}
+        >
+          <h3>Риск от пожар</h3>
+          <Icon name={legendExpanded ? 'x' : 'flame'} size={14} />
         </div>
 
-        <h3>Относителен риск от пожар</h3>
-        <p className="risk-score-note">Процентите са ориентировъчни оценки на модела.</p>
-        {mode === 'live' && (
-          <>
-            <p className="risk-score-note">Спътникови засичания, не потвърдени пожари</p>
-            {liveFiresError && <p className="toolbar-error">FIRMS временно е недостъпен; показват се последните налични данни.</p>}
-            {!liveFiresError && !liveFiresFetching && liveFires?.length === 0 && (
-              <p className="firms-empty-state">Няма спътникови засичания за последните 48 часа. Нови данни се зареждат при зададен FIRMS_MAP_KEY.</p>
-            )}
-          </>
-        )}
+        {/* Заглавие на десктоп */}
+        <h3 className="legend-desktop-title">Относителен риск от пожар</h3>
+
+        {/* Четирите цвята — винаги видими */}
         <div className="legend-levels">
           {Object.entries(RISK_COLORS).map(([level, color]) => (
             <div key={level} className="legend-item">
@@ -721,33 +723,47 @@ export default function MapPage() {
           ))}
         </div>
 
-        {/* Симулация легенда */}
-        {mode === 'simulate' && simData && (
-          <>
-            <div style={{ borderTop: '1px solid #2a2d3a', margin: '0.5rem 0' }} />
-            <div className="legend-item"><span className="legend-dot" style={{ background: '#ef4444' }} /><span>Начало</span></div>
-            <div className="legend-item"><span className="legend-dot" style={{ background: '#f97316' }} /><span>Разпространение</span></div>
-            <p style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.3rem' }}>
-              Учебна симулация — не е прогноза
+        {/* Допълнителна информация — само при разгъната легенда */}
+        <div className="legend-extra">
+          <p className="risk-score-note">Процентите са ориентировъчни оценки на модела.</p>
+          {mode === 'live' && (
+            <>
+              <p className="risk-score-note">Спътникови засичания, не потвърдени пожари</p>
+              {liveFiresError && <p className="toolbar-error">FIRMS временно е недостъпен; показват се последните налични данни.</p>}
+              {!liveFiresError && !liveFiresFetching && liveFires?.length === 0 && (
+                <p className="firms-empty-state">Няма спътникови засичания за последните 48 часа. Нови данни се зареждат при зададен FIRMS_MAP_KEY.</p>
+              )}
+            </>
+          )}
+
+          {/* Симулация легенда */}
+          {mode === 'simulate' && simData && (
+            <>
+              <div style={{ borderTop: '1px solid #2a2d3a', margin: '0.5rem 0' }} />
+              <div className="legend-item"><span className="legend-dot" style={{ background: '#ef4444' }} /><span>Начало</span></div>
+              <div className="legend-item"><span className="legend-dot" style={{ background: '#f97316' }} /><span>Разпространение</span></div>
+              <p style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.3rem' }}>
+                Учебна симулация — не е прогноза
+              </p>
+            </>
+          )}
+
+          {/* Сигнали легенда */}
+          {(role === 'dispatcher' || role === 'admin') && alerts?.length > 0 && (
+            <>
+              <div style={{ borderTop: '1px solid #2a2d3a', margin: '0.5rem 0' }} />
+              <div className="legend-item"><span className="legend-dot" style={{ background: '#ef4444', borderRadius: '50%' }} /><span>Потвърден сигнал</span></div>
+              <div className="legend-item"><span className="legend-dot" style={{ background: '#f97316', borderRadius: '50%' }} /><span>Чакащ сигнал</span></div>
+            </>
+          )}
+
+          {/* Последно обновяване */}
+          {mode === 'live' && (
+            <p style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.5rem', borderTop: '1px solid #2a2d3a', paddingTop: '0.4rem' }}>
+              {lastUpdateTime ? `Обновено: ${formatTime(lastUpdateTime)}` : 'Няма данни за час на обновяване'}
             </p>
-          </>
-        )}
-
-        {/* Сигнали легенда */}
-        {(role === 'dispatcher' || role === 'admin') && alerts?.length > 0 && (
-          <>
-            <div style={{ borderTop: '1px solid #2a2d3a', margin: '0.5rem 0' }} />
-            <div className="legend-item"><span className="legend-dot" style={{ background: '#ef4444', borderRadius: '50%' }} /><span>Потвърден сигнал</span></div>
-            <div className="legend-item"><span className="legend-dot" style={{ background: '#f97316', borderRadius: '50%' }} /><span>Чакащ сигнал</span></div>
-          </>
-        )}
-
-        {/* Последно обновяване */}
-        {mode === 'live' && (
-          <p style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.5rem', borderTop: '1px solid #2a2d3a', paddingTop: '0.4rem' }}>
-            {lastUpdateTime ? `Обновено: ${formatTime(lastUpdateTime)}` : 'Няма данни за час на обновяване'}
-          </p>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

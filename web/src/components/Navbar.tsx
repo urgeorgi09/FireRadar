@@ -64,7 +64,7 @@ export default function Navbar() {
           {!adminHost && (
             <a href={getAdminUrl()} className="bottom-nav-item">
               <Icon name="shield" size={22} />
-              Вход
+              Екип
             </a>
           )}
         </div>
