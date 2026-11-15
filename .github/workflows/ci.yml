@@ -75,6 +75,7 @@ jobs:
         env:
           POSTGRES_DB:       fireradar
           POSTGRES_USER:     fireradar
+          # тестови стойности, само за CI
           POSTGRES_PASSWORD: testpass123
         ports:
           - 5432:5432
@@ -125,6 +126,7 @@ jobs:
           DATABASE_URL: postgres://fireradar:testpass123@localhost:5432/fireradar
           JWT_SECRET: ci-test-secret-key-32chars-minimum
           PORT: 3099
+        # тестови стойности, само за CI
         run: |
           node -e "
             process.env.DATABASE_URL = 'postgres://fireradar:testpass123@localhost:5432/fireradar';

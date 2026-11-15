@@ -213,7 +213,7 @@ export default function AlertsPage() {
                 <a
                   href={`https://www.google.com/maps?q=${a.lat},${a.lon}`}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   style={{ color: 'var(--primary)' }}
                 >
                   {Number(a.lat).toFixed(4)}, {Number(a.lon).toFixed(4)}

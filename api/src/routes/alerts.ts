@@ -6,6 +6,8 @@ import { verifyTurnstile } from '../services/turnstile.js'
 import { requireActiveUser } from '../services/authorization.js'
 import { startDroneAnimation } from './drones.js'
 
+const SYSTEM_ACTOR = 'system@fireradar-bg.org'
+
 const AlertSchema = z.object({
   lat: z.number()
     .min(41.24, 'Координатата е извън България (N)')
@@ -99,7 +101,7 @@ export default async function alertRoutes(app: FastifyInstance) {
       `
       await tx`
         INSERT INTO audit_log (actor_id, actor_email, action, target_id, details)
-        VALUES (NULL, 'system@fireradar-bg.org', 'auto_dispatch_recon', ${String(drone.id)},
+        VALUES (NULL, ${SYSTEM_ACTOR}, 'auto_dispatch_recon', ${String(drone.id)},
           ${sql.json({ drone_type: 'recon', citizen_alert_id: alert.id })})
       `
       if (!updatedAlert) throw new Error('Failed to link reconnaissance drone to citizen alert')
