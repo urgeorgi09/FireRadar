@@ -23,7 +23,7 @@
   --muted: #64748b;
 }
 
-body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; }
+body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100dvh; }
 #root { height: 100%; display: flex; flex-direction: column; }
 .app { flex: 1; display: flex; flex-direction: column; height: 100%; }
 
@@ -38,6 +38,9 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 .nav-links { display: flex; align-items: center; gap: 1.5rem; }
 .nav-links a { color: var(--text); text-decoration: none; font-size: 0.9rem; }
 .nav-links a:hover { color: var(--primary); }
+.nav-links a:focus-visible, .nav-links button:focus-visible, input:focus-visible, textarea:focus-visible, .btn-action:focus-visible, .btn-demo:focus-visible, .btn-pick:focus-visible, .btn-sm:focus-visible {
+  outline: 2px solid var(--primary); outline-offset: 2px;
+}
 .nav-role { font-size: 0.75rem; color: var(--muted); background: var(--border); padding: 2px 8px; border-radius: 99px; }
 .nav-links button { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 12px; border-radius: 6px; cursor: pointer; }
 .nav-links button:hover { border-color: var(--primary); color: var(--primary); }
@@ -45,6 +48,25 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 .theme-toggle-label { white-space: nowrap; }
 .login-card .theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; width: auto; margin-top: 1rem; padding: 0.45rem 0.7rem; background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
 .login-card .theme-toggle:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Bottom navigation bar (mobile only) */
+.bottom-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: env(safe-area-inset-bottom) 0 0;
+}
+.bottom-nav-inner { display: flex; justify-content: space-around; max-width: 500px; margin: 0 auto; }
+.bottom-nav-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; min-width: 44px; min-height: 44px; padding: 8px 12px;
+  text-decoration: none; color: var(--muted); font-size: 0.7rem; cursor: pointer;
+  transition: color 0.15s;
+}
+.bottom-nav-item.active { color: var(--primary); }
+.bottom-nav-item svg { width: 22px; height: 22px; }
+/* Content padding when bottom nav visible (mobile) */
+.has-bottom-nav { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
 
 /* Login */
 .login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
@@ -134,81 +156,127 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 .status-dismissed { opacity: 0.5; }
 .status-pending { border-left: 3px solid var(--moderate); }
 
-@media (max-width: 600px) {
-  .navbar { padding: 0 1rem; }
-  .nav-links { gap: 0.75rem; }
-  .nav-links .theme-toggle { padding: 4px 7px; }
+@media (max-width: 768px) {
+  /* ── Bottom nav видима ──────────────────────────────────────────────────── */
+  .bottom-nav { display: block; }
+
+  /* ── Top navbar: само логото + тема ────────────────────────────────────── */
+  .navbar { padding: 0 0.75rem; height: 50px; }
+  .nav-links { gap: 0.4rem; }
+  .nav-links a:not(.theme-toggle):not(.bottom-nav-only) { display: none; }
+  .nav-links .nav-role, .nav-links button:not(.theme-toggle) { display: none; }
   .theme-toggle-label { display: none; }
+
+  /* ── Карта: toolbar на цялата ширина ─────────────────────────────────────── */
+  .map-toolbar {
+    top: env(safe-area-inset-top, 0.5rem);
+    top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+    left: 0.5rem; right: 0.5rem; transform: none;
+    max-width: none; width: auto;
+    border-radius: 10px;
+  }
+  .mode-tabs button {
+    min-height: 40px; padding: 6px 10px; font-size: 0.78rem; flex: 1;
+  }
+  .btn-demo, .btn-action, .btn-pick { min-height: 40px; }
+
+  /* ── Легенда: компактен долен бар ────────────────────────────────────────── */
   .legend {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    gap: 0.25rem 0.65rem;
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    max-width: none;
-    padding: 0.55rem 0.75rem calc(0.55rem + env(safe-area-inset-bottom));
-    border-radius: 12px 12px 0 0;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
+    position: absolute; right: 0.5rem; bottom: calc(56px + env(safe-area-inset-bottom) + 0.5rem);
+    left: 0.5rem; width: auto; max-width: none;
+    padding: 0.5rem 0.7rem; border-radius: 10px;
     z-index: 10;
   }
-  .legend .mode-badge {
-    grid-column: 1;
-    grid-row: 1;
-    min-width: 4.5rem;
-    margin: 0;
+  .legend h3 { font-size: 0.72rem; }
+  .legend-item { font-size: 0.72rem; min-height: 22px; }
+  .legend-dot { width: 12px; height: 12px; }
+  .legend .mode-badge { font-size: 0.66rem; }
+
+  /* ── MapLibre контроли над легендата ─────────────────────────────────────── */
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right {
+    bottom: calc(56px + env(safe-area-inset-bottom) + 7rem);
   }
-  .legend h3 {
-    grid-column: 2;
-    grid-row: 1;
-    margin: 0;
-    font-size: 0.66rem;
+  .maplibregl-ctrl-top-right { top: calc(env(safe-area-inset-top, 0px) + 5rem); }
+  .maplibregl-ctrl-attrib { font-size: 0.6rem; max-width: 50vw; }
+
+  /* ── Operations: стълб, карта горе, панел долу ───────────────────────────── */
+  .ops-page { flex-direction: column; }
+  .ops-map { height: 45vh; min-height: 250px; }
+  .ops-panel {
+    width: 100%; border-left: none; border-top: 1px solid var(--border);
+    padding: 0.75rem; padding-bottom: calc(56px + env(safe-area-inset-bottom) + 0.75rem);
   }
-  .legend > .risk-score-note:first-of-type {
-    display: none;
+
+  /* ── Alerts: форма без хоризонтално превъртане ──────────────────────────── */
+  .alerts-page { padding: 0.75rem; padding-bottom: calc(56px + env(safe-area-inset-bottom) + 0.75rem); }
+  .alert-form.card { padding: 1rem; }
+  .alert-form input, .alert-form textarea {
+    font-size: 16px; /* ≥16px против iOS zoom */
+    width: 100%;
   }
-  .legend .legend-levels {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    column-gap: 0.2rem;
+  .alert-form input { min-height: 44px; }
+  .alert-form button { min-height: 48px; font-size: 1rem; }
+  .alert-coords {
+    display: flex; gap: 0.4rem; flex-wrap: wrap;
   }
-  .legend .legend-item {
-    gap: 0.25rem;
-    margin: 0;
-    white-space: nowrap;
-    font-size: 0.68rem;
+  .alert-coords input { flex: 1; min-width: 0; }
+  .alert-112-notice {
+    background: #92400e22; border: 1px solid #92400e;
+    color: #fbbf24; border-radius: 8px; padding: 0.5rem 0.75rem;
+    font-size: 0.82rem; font-weight: 600; text-align: center;
+    margin-bottom: 0.5rem;
   }
-  .legend > .risk-score-note,
-  .legend > .toolbar-error,
-  .legend > p[style] {
-    grid-column: 1 / -1;
-    margin: 0;
-    max-width: none;
-    text-align: left;
-    font-size: 0.62rem;
+  .btn-locate {
+    display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+    min-height: 48px; background: #3b82f6; color: white; border: none;
+    border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    width: 100%;
   }
-  .legend > p[style] {
-    border-top: 1px solid var(--border) !important;
-    padding-top: 0.25rem !important;
-    text-align: right;
+  .alert-submit-sticky {
+    position: sticky; bottom: 0; left: 0; right: 0;
+    padding: 0.5rem 0;
+    margin: 0 -1rem -1rem;
+    padding-left: 1rem; padding-right: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
   }
-  .maplibregl-ctrl-bottom-left,
-  .maplibregl-ctrl-bottom-right {
-    bottom: 8.5rem;
+  .alert-submit-sticky button { width: 100%; }
+
+  /* ── Login ──────────────────────────────────────────────────────────────── */
+  .login-page { padding: 0.75rem; }
+  .login-card { padding: 1.5rem; max-width: 360px; }
+  .login-card input { font-size: 16px; min-height: 44px; }
+  .login-card button { min-height: 48px; }
+
+  /* ── Map popup → bottom sheet на мобилни ─────────────────────────────────── */
+  .maplibregl-popup { max-width: none !important; }
+  .maplibregl-popup-content {
+    width: calc(100vw - 1rem) !important;
+    max-width: 360px !important;
+    border-radius: 12px !important;
   }
+
+  /* ── Ops карточки по-компактни ──────────────────────────────────────────── */
+  .ops-card { padding: 0.6rem; }
+  .ops-card-header { flex-wrap: wrap; gap: 0.25rem; }
+  .ops-meta { font-size: 0.72rem; }
+  .btn-sm { min-height: 36px; padding: 4px 10px; }
+  .stat-box span { font-size: 1.25rem; }
+  .stat-box label { font-size: 0.68rem; }
 }
 
 @media (max-width: 420px) {
-  .navbar { padding: 0 0.6rem; }
-  .nav-brand { gap: 0.3rem; font-size: 1.05rem; }
-  .nav-links { gap: 0.4rem; }
-  .nav-links a { font-size: 0.77rem; }
-  .nav-links .theme-toggle { min-width: 32px; padding: 4px 6px; }
+  .navbar { padding: 0 0.5rem; }
+  .nav-brand { font-size: 1rem; }
+  .legend-item { font-size: 0.68rem; }
+  .legend h3 { font-size: 0.68rem; }
+  .mode-tabs button { padding: 5px 6px; font-size: 0.72rem; }
+  .toolbar-section { gap: 0.25rem; }
+  .toolbar-label { font-size: 0.72rem; }
+  .btn-demo { font-size: 0.72rem; padding: 3px 8px; }
+  .bottom-nav-item { font-size: 0.66rem; padding: 6px 8px; }
+  .login-card { padding: 1.25rem; }
 }
 
 /* Operations */

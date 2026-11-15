@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/authContext'
 import axios from 'axios'
 import { Icon } from '../components/Icon'
@@ -27,9 +27,14 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
+        {/* Превключвател за тема в ъгъла */}
+        <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}>
+          <ThemeToggle />
+        </div>
+
         <div className="login-logo"><Icon name="flame" size={42} /></div>
         <h1>FireRadar</h1>
-        <p>Система за ранно предупреждение за горски пожари</p>
+        <p>Вход за екипа</p>
         <form onSubmit={handleSubmit}>
           <input
             type="email"
@@ -37,6 +42,10 @@ export default function LoginPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            autoCorrect="off"
           />
           <input
             type="password"
@@ -44,11 +53,23 @@ export default function LoginPage() {
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
+            inputMode="text"
           />
           {error && <p className="error">{error}</p>}
           <button type="submit">Вход</button>
         </form>
-        <ThemeToggle />
+
+        {/* Връзка назад към картата */}
+        <Link
+          to="/map"
+          style={{
+            display: 'block', marginTop: '1.25rem',
+            color: 'var(--muted)', textDecoration: 'none', fontSize: '0.85rem'
+          }}
+        >
+          ← Назад към картата
+        </Link>
       </div>
     </div>
   )

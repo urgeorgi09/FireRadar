@@ -18,6 +18,7 @@ export default function AlertsPage() {
   const [success, setSuccess] = useState(false)
   const [captchaToken, setCaptchaToken] = useState('')
   const [captchaEpoch, setCaptchaEpoch] = useState(0)
+  const [locating, setLocating] = useState(false)
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<maplibregl.Map | null>(null)
   const markerRef = useRef<maplibregl.Marker | null>(null)
@@ -58,6 +59,24 @@ export default function AlertsPage() {
       axios.patch(`/api/alerts/${id}`, { status }, { headers }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
   })
+
+  // Geolocation API — "Използвай моето местоположение"
+  const useMyLocation = () => {
+    if (!navigator.geolocation) return
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLat(pos.coords.latitude.toFixed(5))
+        setLon(pos.coords.longitude.toFixed(5))
+        setLocating(false)
+      },
+      (err) => {
+        console.warn('Geolocation error:', err.message)
+        setLocating(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
 
   // Мини-карта за избор на координати (само за граждани)
   useEffect(() => {
@@ -104,25 +123,68 @@ export default function AlertsPage() {
     <div className="alerts-page">
       {isPublicReporter && (
         <div className="alert-form card">
+          {/* Бележка за спешни случаи */}
+          <div className="alert-112-notice">
+            <Icon name="flame" size={16} /> При опасност за живот се обади на <strong>112</strong>
+          </div>
+
           <h2>Подай сигнал за пожар</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.5rem' }}>
-            Кликни на картата, за да избереш местоположение
+            Кликни на картата или използвай местоположението си
           </p>
-          <div ref={mapRef} style={{ height: 260, borderRadius: 8, marginBottom: '0.75rem', border: '1px solid var(--border)' }} />
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input placeholder="Ширина (lat)" value={lat} onChange={e => setLat(e.target.value)} style={{ flex: 1 }} />
-            <input placeholder="Дължина (lon)" value={lon} onChange={e => setLon(e.target.value)} style={{ flex: 1 }} />
+
+          {/* Мини-карта */}
+          <div ref={mapRef} style={{ height: 220, borderRadius: 8, marginBottom: '0.6rem', border: '1px solid var(--border)' }} />
+
+          {/* Бутон за геолокация */}
+          <button
+            className="btn-locate"
+            onClick={useMyLocation}
+            disabled={locating}
+            style={{ marginBottom: '0.5rem' }}
+          >
+            {locating ? '⌛ Намиране…' : (<><Icon name="map-pin" size={18} /> Използвай моето местоположение</>)}
+          </button>
+
+          {/* Координати — read-only, само за четене */}
+          <div className="alert-coords" style={{ marginBottom: '0.5rem' }}>
+            <input
+              placeholder="Географска ширина"
+              value={lat ? `${lat}°N` : ''}
+              readOnly
+              style={{ flex: 1, opacity: lat ? 1 : 0.4 }}
+              aria-label="Географска ширина"
+            />
+            <input
+              placeholder="Географска дължина"
+              value={lon ? `${lon}°E` : ''}
+              readOnly
+              style={{ flex: 1, opacity: lon ? 1 : 0.4 }}
+              aria-label="Географска дължина"
+            />
           </div>
-          <textarea placeholder="Описание (незадължително)" value={desc} onChange={e => setDesc(e.target.value)} />
+
+          <textarea
+            placeholder="Описание (незадължително)"
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            maxLength={500}
+          />
+
           <Turnstile key={captchaEpoch} onToken={setCaptchaToken} />
+
           {success && <p className="icon-heading" style={{ color: 'var(--low)', fontSize: '0.85rem' }}><Icon name="check" size={16} /> Сигналът е изпратен успешно</p>}
           {submit.isError && <p className="error">{axios.isAxiosError(submit.error) ? submit.error.response?.data?.error ?? 'Сигналът не можа да бъде изпратен.' : 'Сигналът не можа да бъде изпратен.'}</p>}
-          <button
-            onClick={() => submit.mutate()}
-            disabled={!lat || !lon || !captchaToken || submit.isPending}
-          >
-            {submit.isPending ? 'Изпращане...' : 'Изпрати сигнал'}
-          </button>
+
+          {/* Sticky submit бутон */}
+          <div className="alert-submit-sticky">
+            <button
+              onClick={() => submit.mutate()}
+              disabled={!lat || !lon || !captchaToken || submit.isPending}
+            >
+              {submit.isPending ? 'Изпращане...' : 'Изпрати сигнал'}
+            </button>
+          </div>
         </div>
       )}
 
