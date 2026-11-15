@@ -41,3 +41,5 @@ Thumbs.db
 # ML
 ml/__pycache__/
 ml/*.pkl
+
+*.tar.gz
