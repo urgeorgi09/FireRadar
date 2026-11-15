@@ -52,6 +52,8 @@ export default function MapPage() {
   const [isPickingCell, setIsPickingCell] = useState(false)
   const [isSimPlaying, setIsSimPlaying] = useState(false)
   const [legendExpanded, setLegendExpanded] = useState(false)  // свита по подразбиране на мобилни
+  const [replayPanelExpanded, setReplayPanelExpanded] = useState(true)  // разгънат преди "Покажи", свит след
+  const [isMobile, setIsMobile] = useState(false)
   const [clockNow, setClockNow] = useState(() => Date.now())
   const simStepRef = useRef(0)
   const simTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -59,6 +61,15 @@ export default function MapPage() {
   useEffect(() => {
     const timer = setInterval(() => setClockNow(Date.now()), 60_000)
     return () => clearInterval(timer)
+  }, [])
+
+  // Детекция на мобилни за по-тънки линии на клетките
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
   }, [])
 
   // ── Queries ──────────────────────────────────────────────────────────────
@@ -217,7 +228,11 @@ export default function MapPage() {
       })
       map.addLayer({
         id: 'cells-border', type: 'line', source: 'cells',
-        paint: { 'line-color': '#ffffff', 'line-width': 0.3, 'line-opacity': 0.3 },
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': isMobile ? 0.15 : 0.3,
+          'line-opacity': isMobile ? 0.15 : 0.3,
+        },
       })
       map.addLayer({
         id: 'cells-score-label',
@@ -326,7 +341,7 @@ export default function MapPage() {
 
     if (map.isStyleLoaded()) addLayers()
     else map.on('load', addLayers)
-  }, [cells, theme])
+  }, [cells, theme, isMobile])
 
   useEffect(() => {
     const map = mapInstance.current
@@ -493,6 +508,7 @@ export default function MapPage() {
       return
     }
     setActiveReplayDate(replayDate)  // само тук се прави заявката
+    setReplayPanelExpanded(false)    // свиваме панела след "Покажи"
     switchMode('replay')
   }
 
@@ -619,33 +635,38 @@ export default function MapPage() {
           </button>
         </div>
 
-        {/* Демо сценарий — само в режим Повторение, малък бутон */}
-        {mode === 'replay' && (
-          <button className="btn-demo" onClick={handleDemoScenario} disabled={demoLoading} title="Покажи деня с най-много FIRMS засичания от 2024 г. насам">
-            {demoLoading
-              ? <><span className="loading-spinner-small" /> Зареждам...</>
-              : <><Icon name="play" size={15} /> Демо сценарий</>}
-          </button>
-        )}
-
         {/* Replay controls */}
         {mode === 'replay' && (
-          <div className="toolbar-section">
-            <input
-              type="date"
-              value={replayDate}
-              max={replayMaxDate}
-              min={REPLAY_START_DATE}
-              onChange={e => { setReplayDate(e.target.value); setReplayError('') }}
-              className="date-input"
-            />
-            <span className="toolbar-info">Тестов период: от 01.01.2024 г.</span>
-            <button className="btn-action" onClick={handleReplay} disabled={!replayDate || replayFetching}>
-              {replayFetching ? <span className="loading-spinner-small" /> : <Icon name="play" size={15} />}
-              {!replayFetching && 'Покажи'}
-            </button>
-            {visibleReplayError && <span className="toolbar-error">{visibleReplayError}</span>}
-          </div>
+          activeReplayDate && !replayPanelExpanded ? (
+            /* Свит панел — един ред: дата + "Промени" */
+            <div className="replay-collapsed">
+              <Icon name="history" size={15} />
+              <span className="replay-collapsed-date">{activeReplayDate}</span>
+              <button className="btn-change" onClick={() => setReplayPanelExpanded(true)}>Промени</button>
+            </div>
+          ) : (
+            /* Разгънат панел — избор на дата + Демо + Покажи */
+            <div className="toolbar-section">
+              <input
+                type="date"
+                value={replayDate}
+                max={replayMaxDate}
+                min={REPLAY_START_DATE}
+                onChange={e => { setReplayDate(e.target.value); setReplayError('') }}
+                className="date-input"
+              />
+              <button className="btn-demo" onClick={handleDemoScenario} disabled={demoLoading} title="Покажи деня с най-много FIRMS засичания от 2024 г. насам">
+                {demoLoading
+                  ? <><span className="loading-spinner-small" /> Зареждам...</>
+                  : <><Icon name="play" size={15} /> Демо сценарий</>}
+              </button>
+              <button className="btn-action" onClick={handleReplay} disabled={!replayDate || replayFetching}>
+                {replayFetching ? <span className="loading-spinner-small" /> : <Icon name="play" size={15} />}
+                {!replayFetching && 'Покажи'}
+              </button>
+              {visibleReplayError && <span className="toolbar-error">{visibleReplayError}</span>}
+            </div>
+          )
         )}
 
         {/* Simulate controls */}
@@ -713,7 +734,7 @@ export default function MapPage() {
         {/* Заглавие на десктоп */}
         <h3 className="legend-desktop-title">Относителен риск от пожар</h3>
 
-        {/* Четирите цвята — винаги видими */}
+        {/* Четирите нива + засичане — винаги видими */}
         <div className="legend-levels">
           {Object.entries(RISK_COLORS).map(([level, color]) => (
             <div key={level} className="legend-item">
@@ -721,6 +742,10 @@ export default function MapPage() {
               <span>{RISK_BG[level]}</span>
             </div>
           ))}
+          <div className="legend-item">
+            <span className="legend-dot" style={{ background: '#ff2d2d', borderRadius: '50%' }} />
+            <span>Засичане</span>
+          </div>
         </div>
 
         {/* Допълнителна информация — само при разгъната легенда */}

@@ -159,6 +159,39 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
   .maplibregl-ctrl-group { display: flex !important; }
 }
 
+/* MapLibre атрибуция — компактна, затворена иконка, без бяла кутия */
+.maplibregl-ctrl-attrib {
+  background: transparent !important;
+  font-size: 0.6rem;
+  padding: 0 4px;
+  border-radius: 4px 0 0 0;
+}
+.maplibregl-ctrl-attrib-button {
+  background: var(--surface) !important;
+  opacity: 0.6;
+  width: 18px; height: 18px;
+}
+@media (max-width: 768px) {
+  .maplibregl-ctrl-attrib { font-size: 0.55rem; opacity: 0.7; }
+  .maplibregl-ctrl-bottom-right { bottom: calc(56px + env(safe-area-inset-bottom) + 7rem); }
+  .maplibregl-ctrl-bottom-left  { bottom: calc(56px + env(safe-area-inset-bottom) + 7rem); }
+}
+
+/* Replay collapsed panel — един ред */
+.replay-collapsed {
+  display: flex; align-items: center; gap: 0.4rem; width: 100%;
+  padding: 4px 8px;
+}
+.replay-collapsed-date {
+  font-size: 0.82rem; font-weight: 600; color: var(--primary);
+  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.btn-change {
+  background: var(--border); color: var(--text); border: none;
+  padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; cursor: pointer;
+  min-height: 36px; white-space: nowrap;
+}
+
 /* Desktop-only заглавие в легендата */
 .legend-desktop-title { display: block; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.04em; }
 @media (max-width: 768px) {
