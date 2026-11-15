@@ -71,10 +71,10 @@ export default function OperationsPage() {
   const headers = { Authorization: `Bearer ${token}` }
   const isOps = role === 'dispatcher' || role === 'admin'
 
-  const { data: towers }       = useQuery({ queryKey: ['towers'],        queryFn: () => axios.get('/api/towers',        { headers }).then(r => r.data), refetchInterval: 15000 })
-  const { data: towerAlerts }  = useQuery({ queryKey: ['tower-alerts'],  queryFn: () => axios.get('/api/towers/alerts', { headers }).then(r => r.data), refetchInterval: 10000 })
+  const { data: towers,       isLoading: loadingTowers  } = useQuery({ queryKey: ['towers'],        queryFn: () => axios.get('/api/towers',        { headers }).then(r => r.data), refetchInterval: 15000 })
+  const { data: towerAlerts,  isLoading: loadingAlerts  } = useQuery({ queryKey: ['tower-alerts'],  queryFn: () => axios.get('/api/towers/alerts', { headers }).then(r => r.data), refetchInterval: 10000 })
   const { data: citizenAlerts } = useQuery({ queryKey: ['citizen-alerts'], queryFn: () => axios.get('/api/alerts', { headers }).then(r => r.data), refetchInterval: 10000 })
-  const { data: drones }       = useQuery({ queryKey: ['drones'],        queryFn: () => axios.get('/api/drones',        { headers }).then(r => r.data), refetchInterval: 5000  })
+  const { data: drones,       isLoading: loadingDrones  } = useQuery({ queryKey: ['drones'],        queryFn: () => axios.get('/api/drones',        { headers }).then(r => r.data), refetchInterval: 5000  })
 
   const updateAlertStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
@@ -299,16 +299,17 @@ export default function OperationsPage() {
 
         {/* Статистика */}
         <div className="ops-stats">
-          <div className="stat-box"><span>{(towers ?? []).length}</span><label>Кули</label></div>
-          <div className="stat-box warn"><span>{pendingAlerts.length + pendingCitizenAlerts.length}</span><label>Чакащи</label></div>
-          <div className="stat-box danger"><span>{confirmedAlerts.length + confirmedCitizenAlerts.length}</span><label>Потвърдени</label></div>
-          <div className="stat-box info"><span>{activeDrones.length}</span><label>Активни дронове</label></div>
+          <div className="stat-box"><span>{loadingTowers ? '…' : (towers ?? []).length}</span><label>Кули</label></div>
+          <div className="stat-box warn"><span>{loadingAlerts ? '…' : pendingAlerts.length + pendingCitizenAlerts.length}</span><label>Чакащи</label></div>
+          <div className="stat-box danger"><span>{loadingAlerts ? '…' : confirmedAlerts.length + confirmedCitizenAlerts.length}</span><label>Потвърдени</label></div>
+          <div className="stat-box info"><span>{loadingDrones ? '…' : activeDrones.length}</span><label>Активни дронове</label></div>
         </div>
 
         {/* Сигнали от кули */}
         <section>
           <h3 className="icon-heading"><Icon name="flame" size={16} /> Сигнали от кули <span className="meta">· демо данни</span></h3>
-          {!(towerAlerts?.length) && <p className="muted-text">Няма сигнали</p>}
+          {loadingAlerts && <p className="muted-text">Зареждане…</p>}
+          {!loadingAlerts && !(towerAlerts?.length) && <p className="muted-text">Няма сигнали</p>}
           {(towerAlerts ?? []).map((a: any) => (
             <div key={a.id} className={`ops-card status-${a.status}`}>
               <div className="ops-card-header">
@@ -410,6 +411,15 @@ export default function OperationsPage() {
         {/* Дронове */}
         <section>
           <h3 className="icon-heading"><Icon name="drone" size={16} /> Дронове <span className="meta">· демо данни</span></h3>
+          {loadingDrones && <p className="muted-text">Зареждане…</p>}
+          {!loadingDrones && !(drones?.length) && <p className="muted-text">Няма дронове</p>}
+          {returnDrone.error && (
+            <p className="error" role="alert" style={{ marginBottom: '0.5rem' }}>
+              {axios.isAxiosError(returnDrone.error)
+                ? returnDrone.error.response?.data?.error ?? returnDrone.error.message
+                : (returnDrone.error as Error).message}
+            </p>
+          )}
           {(drones ?? []).map((d: any) => (
             <div key={d.id} className="ops-card">
               <div className="ops-card-header">

@@ -101,10 +101,12 @@ app.get('/health', async () => ({ status: 'ok', time: new Date().toISOString() }
 const port = Number(process.env.PORT ?? 3000)
 await runMigrations()
 await recoverDrones()
+// Зареждаме модела ПРЕДИ listen — иначе заявките пристигат преди ONNX сесията да е готова
+await loadModel()
 await app.listen({ port, host: '0.0.0.0' })
 
+// Останалите jobs вървят след listen (не блокират API отговорите)
 try {
-  await loadModel()
   await importFires()
   await generateCells()
   await updateForecasts()

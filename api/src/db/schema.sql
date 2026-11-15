@@ -158,3 +158,18 @@ CREATE TABLE IF NOT EXISTS sensor_api_keys (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS sensor_api_keys_hash_idx ON sensor_api_keys(api_key_hash);
+
+-- Индекси за производителност
+-- risk_forecasts: LATERAL join ORDER BY forecast_at DESC LIMIT 1 за всяка клетка
+CREATE INDEX IF NOT EXISTS risk_forecasts_cell_forecast_idx
+  ON risk_forecasts(cell_id, forecast_at DESC);
+
+-- alerts: филтриране по статус в OperationsPage и AlertsPage
+CREATE INDEX IF NOT EXISTS alerts_status_idx ON alerts(status);
+
+-- tower_alerts: сортиране и филтриране по статус
+CREATE INDEX IF NOT EXISTS tower_alerts_status_time_idx
+  ON tower_alerts(status, created_at DESC);
+
+-- fires: филтриране по дата при recent FIRMS import
+CREATE INDEX IF NOT EXISTS fires_detected_at_idx ON fires(detected_at DESC);

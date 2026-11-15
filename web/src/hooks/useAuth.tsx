@@ -24,6 +24,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Access token expires after 15 minutes; refresh it before expiry.
   useEffect(() => {
     if (!token) return
+
+    // Проверяваме exp claim при всяко mount (включително tab wake от sleep)
+    const tryRefresh = async () => {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1] ?? ''))
+        const expiresInMs = payload.exp * 1000 - Date.now()
+        // Ако изтича в следващите 2 минути — refresh веднага
+        if (expiresInMs < 2 * 60 * 1000) {
+          const res = await axios.post('/api/auth/refresh', {}, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          localStorage.setItem('fr_token', res.data.token)
+          setToken(res.data.token)
+          return
+        }
+      } catch {
+        logout()
+        return
+      }
+    }
+
+    void tryRefresh()
+
     const refresh = async () => {
       try {
         const res = await axios.post('/api/auth/refresh', {}, {
@@ -33,10 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('fr_token', newToken)
         setToken(newToken)
       } catch {
-        // Токенът е изтекъл или невалиден — logout
         logout()
       }
     }
+    // Refresh на всеки 10 мин — токенът е 15 мин
     const id = setInterval(refresh, 10 * 60 * 1000)
     return () => clearInterval(id)
   }, [token, logout])

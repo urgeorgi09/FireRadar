@@ -1,12 +1,43 @@
+# Node
 node_modules/
 dist/
-.env
-data/*.csv
-data.tar.gz
-data/*.tif
-data/clc_polygon_centroids.json
-*.log
-**/.env
-data/clc2018_bgr.geojson
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Данни (свалят се локално, не се commit-ват)
+data/*.csv
+data/*.tif
+data/*.geojson
+data/*.json
+data/*.tar.gz
+
+# Среда и тайни
+.env
+**/.env
+*.env.local
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Docker
+pgdata/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ML
+ml/__pycache__/
+ml/*.pkl

@@ -9,7 +9,7 @@
  * - Прогнозата е за следващите 3 дни (индекси 60, 61, 62)
  */
 import sql from '../db/client.js'
-import { predictRisk } from '../services/model.js'
+import { predictRisk, type PredictInput } from '../services/model.js'
 import { fwiSeries, INITIAL_STATE, type Weather } from '../services/fwi.js'
 
 function getRepresentativePoints() {
@@ -76,6 +76,49 @@ function nearest(lat: number, lon: number, points: { lat: number; lon: number }[
   return best
 }
 
+/**
+ * Inverse Distance Weighting (IDW) интерполация.
+ * Взима N най-близки точки и ги тегли по 1/d².
+ * По-добро от nearest-neighbor — съседни клетки не получават еднакви стойности.
+ */
+function idwWeather(
+  lat: number,
+  lon: number,
+  points: { lat: number; lon: number }[],
+  weatherByPoint: (Weather[] | null)[]
+): Weather[] | null {
+  // Намираме 4 най-близки точки с данни
+  const dists = points
+    .map((p, i) => ({ i, d2: (lat - p.lat) ** 2 + (lon - p.lon) ** 2 }))
+    .filter(x => weatherByPoint[x.i] !== null)
+    .sort((a, b) => a.d2 - b.d2)
+    .slice(0, 4)
+
+  if (dists.length === 0) return null
+  // Ако сме точно на представителна точка — директно
+  if (dists[0].d2 < 1e-8) return weatherByPoint[dists[0].i]
+
+  const weights = dists.map(x => 1 / Math.max(x.d2, 1e-10))
+  const totalW  = weights.reduce((s, w) => s + w, 0)
+
+  // Всички серии имат еднакъв брой дни — интерполираме за всеки ден
+  const nDays = weatherByPoint[dists[0].i]!.length
+  return Array.from({ length: nDays }, (_, di) => {
+    let temp = 0, rh = 0, wind = 0, rain = 0
+    let month = 1
+    for (let k = 0; k < dists.length; k++) {
+      const w  = weights[k] / totalW
+      const wd = weatherByPoint[dists[k].i]![di]
+      temp  += w * wd.temp
+      rh    += w * wd.rh
+      wind  += w * wd.wind
+      rain  += w * wd.rain
+      if (k === 0) month = wd.month
+    }
+    return { temp: +temp.toFixed(2), rh: +rh.toFixed(1), wind: +wind.toFixed(1), rain: +rain.toFixed(2), month }
+  })
+}
+
 export async function updateForecasts() {
   await sql`ALTER TABLE risk_forecasts ADD COLUMN IF NOT EXISTS risk_score DOUBLE PRECISION`
   await sql`ALTER TABLE risk_forecasts ADD COLUMN IF NOT EXISTS risk_source TEXT`
@@ -122,51 +165,74 @@ export async function updateForecasts() {
     days ? fwiSeries(days, INITIAL_STATE) : null
   )
 
-  const forecasts: {
-    cell_id: number; forecast_at: string
-    fwi: number; risk_level: string; risk_score: number
-    risk_source: 'model' | 'fwi'; explanation: string
-  }[] = []
+  // Събираме всички входни данни в плосък масив — след това правим predictRiskBatch
+  // вместо N×3 последователни await predictRisk() извиквания
+  type PendingForecast = {
+    cell_id: number; forecast_at: string; fwi: number
+    input: PredictInput; fwiRes: ReturnType<typeof fwiSeries>[number]
+  }
+  const pending: PendingForecast[] = []
 
   for (const cell of cells) {
-    const idx    = nearest(cell.lat, cell.lon, repPoints)
-    const days   = weatherByPoint[idx]
-    const series = fwiByPoint[idx]
+    const days   = idwWeather(cell.lat, cell.lon, repPoints, weatherByPoint)
+    const series = days ? fwiSeries(days, INITIAL_STATE) : null
     if (!days || !series) continue
 
-    // Прогнозните дни са последните 3 (индекси 60, 61, 62 от 63 общо)
     const forecastStart = days.length - 3
     for (let d = forecastStart; d < days.length; d++) {
       const weather = days[d]
       const fwiRes  = series[d]
       const dateStr = new Date(Date.now() + (d - forecastStart) * 86400000)
         .toISOString().slice(0, 10)
-
-      const pred = await predictRisk({
-        temp:      weather.temp,
-        humidity:  weather.rh,
-        windSpeed: weather.wind,
-        precip:    weather.rain,
-        month:     weather.month,
-        doy:       Math.floor((new Date(dateStr).getTime() - new Date(new Date(dateStr).getFullYear(), 0, 0).getTime()) / 86400000),
-        veg_type:  cell.veg_type,
-        // Передаваме реалните FWI компоненти — lag вече е вграден в серията
-        fwi_lag1:  d > 0 ? series[d - 1].fwi : fwiRes.fwi,
-        fwi_lag2:  d > 1 ? series[d - 2].fwi : fwiRes.fwi,
-        fwi_lag3:  d > 2 ? series[d - 3].fwi : fwiRes.fwi,
-        // Предаваме реалния FWI от серията (с памет!)
-        fwi_override: fwiRes.fwi,
-        ffmc: fwiRes.ffmc,
-        dmc:  fwiRes.dmc,
-        dc:   fwiRes.dc,
-        isi:  fwiRes.isi,
-        bui:  fwiRes.bui,
-      }, fwiRes)
-
-      forecasts.push({
+      const doy = Math.floor(
+        (new Date(dateStr).getTime() - new Date(new Date(dateStr).getFullYear(), 0, 0).getTime()) / 86400000
+      )
+      pending.push({
         cell_id:     cell.id,
         forecast_at: dateStr + 'T12:00:00+02:00',
         fwi:         fwiRes.fwi,
+        fwiRes,
+        input: {
+          temp:      weather.temp,
+          humidity:  weather.rh,
+          windSpeed: weather.wind,
+          precip:    weather.rain,
+          month:     weather.month,
+          doy,
+          veg_type:  cell.veg_type,
+          fwi_lag1:  d > 0 ? series[d - 1].fwi : fwiRes.fwi,
+          fwi_lag2:  d > 1 ? series[d - 2].fwi : fwiRes.fwi,
+          fwi_lag3:  d > 2 ? series[d - 3].fwi : fwiRes.fwi,
+          fwi_override: fwiRes.fwi,
+          ffmc: fwiRes.ffmc,
+          dmc:  fwiRes.dmc,
+          dc:   fwiRes.dc,
+          isi:  fwiRes.isi,
+          bui:  fwiRes.bui,
+        },
+      })
+    }
+  }
+
+  // Пускаме predictRisk в паралелни batch-ове от 100 — не последователно
+  // Намалява времето от ~30 сек до ~3 сек при 1300+ клетки
+  const PRED_BATCH = 100
+  const forecasts: {
+    cell_id: number; forecast_at: string
+    fwi: number; risk_level: string; risk_score: number
+    risk_source: 'model' | 'fwi'; explanation: string
+  }[] = []
+
+  for (let i = 0; i < pending.length; i += PRED_BATCH) {
+    const batch = pending.slice(i, i + PRED_BATCH)
+    const preds = await Promise.all(batch.map(p => predictRisk(p.input, p.fwiRes)))
+    for (let j = 0; j < batch.length; j++) {
+      const p    = batch[j]
+      const pred = preds[j]
+      forecasts.push({
+        cell_id:     p.cell_id,
+        forecast_at: p.forecast_at,
+        fwi:         p.fwi,
         risk_level:  pred.risk_level,
         risk_score:  pred.risk_score,
         risk_source: pred.source,

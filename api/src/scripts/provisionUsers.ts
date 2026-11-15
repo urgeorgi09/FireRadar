@@ -1,58 +1,76 @@
+/**
+ * Provision скрипт за екипни акаунти.
+ * Употреба:
+ *   docker compose exec -e ADMIN_EMAIL -e ADMIN_PASSWORD \
+ *     -e DISPATCHER_EMAIL -e DISPATCHER_PASSWORD api npm run provision:users
+ *
+ * Скриптът:
+ * - Създава или обновява admin акаунта
+ * - Създава или обновява dispatcher акаунта
+ * - Премахва legacy citizen@fireradar.bg ако съществува (пази сигналите)
+ * - Извежда резюме без пароли
+ */
 import 'dotenv/config'
 import bcrypt from 'bcrypt'
 import sql from '../db/client.js'
 
-function requiredCredentials(role: 'ADMIN' | 'DISPATCHER') {
-  const email = process.env[`${role}_EMAIL`]?.trim().toLowerCase()
-  const password = process.env[`${role}_PASSWORD`]
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    throw new Error(`${role}_EMAIL must be a valid email address`)
-  if (!password || password.length < 14)
-    throw new Error(`${role}_PASSWORD must be at least 14 characters`)
-  return { email, password }
-}
+async function provision() {
+  const adminEmail      = process.env.ADMIN_EMAIL
+  const adminPassword   = process.env.ADMIN_PASSWORD
+  const dispEmail       = process.env.DISPATCHER_EMAIL
+  const dispPassword    = process.env.DISPATCHER_PASSWORD
 
-async function main() {
-  const admin = requiredCredentials('ADMIN')
-  const dispatcher = requiredCredentials('DISPATCHER')
-  if (admin.email === dispatcher.email)
-    throw new Error('ADMIN_EMAIL and DISPATCHER_EMAIL must be different')
+  if (!adminEmail || !adminPassword || !dispEmail || !dispPassword) {
+    console.error('❌ Задай ADMIN_EMAIL, ADMIN_PASSWORD, DISPATCHER_EMAIL, DISPATCHER_PASSWORD')
+    process.exit(1)
+  }
+  if (adminPassword.length < 14 || dispPassword.length < 14) {
+    console.error('❌ Паролите трябва да са поне 14 знака')
+    process.exit(1)
+  }
+  if (adminEmail === dispEmail) {
+    console.error('❌ Admin и Dispatcher трябва да имат различни имейли')
+    process.exit(1)
+  }
 
-  const [adminHash, dispatcherHash] = await Promise.all([
-    bcrypt.hash(admin.password, 12),
-    bcrypt.hash(dispatcher.password, 12),
-  ])
+  const adminHash = await bcrypt.hash(adminPassword, 12)
+  const dispHash  = await bcrypt.hash(dispPassword, 12)
 
-  await sql.begin(async tx => {
-    await tx`
-      INSERT INTO users (email, password, role, active)
-      VALUES (${admin.email}, ${adminHash}, 'admin', true)
-      ON CONFLICT (email) DO UPDATE
-      SET password = EXCLUDED.password, role = EXCLUDED.role, active = true
-    `
-    await tx`
-      INSERT INTO users (email, password, role, active)
-      VALUES (${dispatcher.email}, ${dispatcherHash}, 'dispatcher', true)
-      ON CONFLICT (email) DO UPDATE
-      SET password = EXCLUDED.password, role = EXCLUDED.role, active = true
-    `
-    await tx`
-      UPDATE alerts
-      SET user_id = NULL
-      WHERE user_id = (SELECT id FROM users WHERE email = 'citizen@fireradar.bg')
-    `
-    await tx`DELETE FROM users WHERE email = 'citizen@fireradar.bg'`
-  })
+  // Upsert admin
+  await sql`
+    INSERT INTO users (email, password, role, active)
+    VALUES (${adminEmail}, ${adminHash}, 'admin', true)
+    ON CONFLICT (email) DO UPDATE SET
+      password = EXCLUDED.password,
+      role     = 'admin',
+      active   = true
+  `
+  console.log(`✓ Admin: ${adminEmail}`)
 
-  console.log(`Provisioned admin account: ${admin.email}`)
-  console.log(`Provisioned dispatcher account: ${dispatcher.email}`)
-}
+  // Upsert dispatcher
+  await sql`
+    INSERT INTO users (email, password, role, active)
+    VALUES (${dispEmail}, ${dispHash}, 'dispatcher', true)
+    ON CONFLICT (email) DO UPDATE SET
+      password = EXCLUDED.password,
+      role     = 'dispatcher',
+      active   = true
+  `
+  console.log(`✓ Dispatcher: ${dispEmail}`)
 
-try {
-  await main()
-} catch (error) {
-  console.error(error instanceof Error ? error.message : 'Account provisioning failed')
-  process.exitCode = 1
-} finally {
+  // Премахваме legacy тестовите акаунти (ако съществуват)
+  const legacy = ['citizen@fireradar.bg', 'dispatcher@fireradar.bg', 'admin@fireradar.bg']
+  const legacyToRemove = legacy.filter(e => e !== adminEmail && e !== dispEmail)
+  for (const email of legacyToRemove) {
+    const result = await sql`DELETE FROM users WHERE email = ${email} RETURNING email`
+    if (result.length > 0) console.log(`  Изтрит legacy акаунт: ${email}`)
+  }
+
+  console.log('\n✅ Екипните акаунти са готови. Не публикувай паролите.')
   await sql.end()
 }
+
+provision().catch(err => {
+  console.error('Грешка:', err.message)
+  process.exit(1)
+})

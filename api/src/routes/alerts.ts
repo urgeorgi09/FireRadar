@@ -120,12 +120,7 @@ export default async function alertRoutes(app: FastifyInstance) {
   })
 
   // Диспечер/Admin вижда всички сигнали
-  app.get('/', { preHandler: requireActiveUser(['dispatcher', 'admin']) }, async (req, reply) => {
-    await req.jwtVerify()
-    const user = req.user as { role: string }
-    if (!['dispatcher', 'admin'].includes(user.role))
-      return reply.status(403).send({ error: 'Забранен достъп' })
-
+  app.get('/', { preHandler: requireActiveUser(['dispatcher', 'admin']) }, async (req) => {
     return sql`
       SELECT a.*,
              u.email AS reporter_email,
@@ -144,7 +139,6 @@ export default async function alertRoutes(app: FastifyInstance) {
 
   // Диспечер потвърждава/отхвърля сигнал
   app.patch('/:id', { preHandler: requireActiveUser(['dispatcher', 'admin']) }, async (req, reply) => {
-    await req.jwtVerify()
     const user = req.user as { role: string; id: number; email: string }
     if (!['dispatcher', 'admin'].includes(user.role))
       return reply.status(403).send({ error: 'Забранен достъп' })

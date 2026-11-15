@@ -70,10 +70,7 @@ export default async function sensorRoutes(app: FastifyInstance) {
   app.post('/simulate/:tower_id', {
     preHandler: requireActiveUser(['dispatcher', 'admin']),
   }, async (req, reply) => {
-    await req.jwtVerify()
     const user = req.user as { role: string }
-    if (!['dispatcher', 'admin'].includes(user.role))
-      return reply.status(403).send({ error: 'Само диспечери и администратори' })
 
     const { tower_id } = req.params as { tower_id: string }
     const [tower] = await sql`SELECT * FROM watch_towers WHERE id = ${tower_id}`
@@ -102,7 +99,6 @@ export default async function sensorRoutes(app: FastifyInstance) {
 
   // ── Управление на API ключове (само admin) ────────────────────────────────
   app.get('/keys', { preHandler: requireActiveUser(['admin']) }, async (req, reply) => {
-    await req.jwtVerify()
     const user = req.user as { role: string }
     if (user.role !== 'admin') return reply.status(403).send({ error: 'Само администратори' })
     return sql`
@@ -115,7 +111,6 @@ export default async function sensorRoutes(app: FastifyInstance) {
   })
 
   app.post('/keys', { preHandler: requireActiveUser(['admin']) }, async (req, reply) => {
-    await req.jwtVerify()
     const user = req.user as { role: string }
     if (user.role !== 'admin') return reply.status(403).send({ error: 'Само администратори' })
 

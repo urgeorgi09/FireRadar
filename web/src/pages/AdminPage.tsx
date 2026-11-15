@@ -24,9 +24,9 @@ export default function AdminPage() {
     { id: 'sensors', label: 'Сензори', icon: 'radio' },
   ]
 
-  const { data: users }  = useQuery({ queryKey: ['admin-users'],  queryFn: () => axios.get('/api/admin/users',  { headers }).then(r => r.data), enabled: role === 'admin' })
-  const { data: audit }  = useQuery({ queryKey: ['admin-audit'],  queryFn: () => axios.get('/api/admin/audit?limit=30', { headers }).then(r => r.data), enabled: role === 'admin' && activeTab === 'audit' })
-  const { data: stats }  = useQuery({ queryKey: ['admin-stats'],  queryFn: () => axios.get('/api/admin/stats',  { headers }).then(r => r.data), enabled: role === 'admin' && activeTab === 'stats', refetchInterval: 30000 })
+  const { data: users,  isLoading: usersLoading  } = useQuery({ queryKey: ['admin-users'],  queryFn: () => axios.get('/api/admin/users',  { headers }).then(r => r.data), enabled: role === 'admin' })
+  const { data: audit,  isLoading: auditLoading  } = useQuery({ queryKey: ['admin-audit'],  queryFn: () => axios.get('/api/admin/audit?limit=30', { headers }).then(r => r.data), enabled: role === 'admin' && activeTab === 'audit' })
+  const { data: stats,  isLoading: statsLoading  } = useQuery({ queryKey: ['admin-stats'],  queryFn: () => axios.get('/api/admin/stats',  { headers }).then(r => r.data), enabled: role === 'admin' && activeTab === 'stats', refetchInterval: 30000 })
   const { data: towers } = useQuery({ queryKey: ['towers'],       queryFn: () => axios.get('/api/towers',       { headers }).then(r => r.data), enabled: role === 'admin' })
 
   const changeRole = useMutation({
@@ -74,6 +74,7 @@ export default function AdminPage() {
       {activeTab === 'users' && (
         <div>
           <h3 style={{ marginBottom: '0.75rem' }}>Потребители</h3>
+          {usersLoading && <p style={{ color: 'var(--muted)' }}>Зареждане…</p>}
           {(users ?? []).map((u: any) => (
             <div key={u.id} className={`card alert-card ${u.active ? '' : 'status-dismissed'}`} style={{ marginBottom: '0.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -112,7 +113,8 @@ export default function AdminPage() {
       {activeTab === 'audit' && (
         <div>
           <h3 style={{ marginBottom: '0.75rem' }}>Последни 30 действия</h3>
-          {!(audit?.length) && <p style={{ color: 'var(--muted)' }}>Няма записи</p>}
+          {auditLoading && <p style={{ color: 'var(--muted)' }}>Зареждане…</p>}
+          {!auditLoading && !(audit?.length) && <p style={{ color: 'var(--muted)' }}>Няма записи</p>}
           {(audit ?? []).map((a: any) => (
             <div key={a.id} className="card" style={{ marginBottom: '0.4rem', padding: '0.6rem 1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -126,9 +128,12 @@ export default function AdminPage() {
       )}
 
       {/* Статистика */}
-      {activeTab === 'stats' && stats && (
+      {activeTab === 'stats' && (
         <div>
           <h3 style={{ marginBottom: '0.75rem' }}>Системна статистика</h3>
+          {statsLoading && <p style={{ color: 'var(--muted)' }}>Зареждане…</p>}
+          {!statsLoading && !stats && <p style={{ color: 'var(--muted)' }}>Няма данни</p>}
+          {stats && (<>
           <div className="ops-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             {[
               ['Потребители', stats.total_users],
@@ -152,6 +157,7 @@ export default function AdminPage() {
               Последна прогноза: {new Date(stats.last_forecast_at).toLocaleString('bg-BG')}
             </p>
           )}
+          </>)}
         </div>
       )}
 

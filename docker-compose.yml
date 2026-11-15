@@ -1,6 +1,7 @@
 services:
   db:
     image: postgis/postgis:16-3.4
+    restart: unless-stopped
     environment:
       POSTGRES_DB: fireradar
       POSTGRES_USER: fireradar
@@ -23,6 +24,7 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile.compose
+    restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3000"
     environment:
@@ -48,6 +50,7 @@ services:
       context: ./web
       args:
         VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+    restart: unless-stopped
     ports:
       - "127.0.0.1:5173:80"
     depends_on:

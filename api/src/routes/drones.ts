@@ -11,23 +11,11 @@ import { z } from 'zod'
 import sql from '../db/client.js'
 import { requireActiveUser } from '../services/authorization.js'
 
-function requireOps(req: any, reply: any): boolean {
-  const user = req.user as { role: string }
-  if (!['dispatcher', 'admin'].includes(user.role)) {
-    reply.status(403).send({ error: 'Само диспечери и администратори' })
-    return false
-  }
-  return true
-}
-
 export default async function droneRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireActiveUser(['dispatcher', 'admin']))
 
   // ── GET /drones ──────────────────────────────────────────────────────────
-  // Само dispatcher/admin — позициите на дроновете са оперативна информация
-  app.get('/', async (req, reply) => {
-    await req.jwtVerify()
-    if (!requireOps(req, reply)) return
+  app.get('/', async () => {
     return sql`
       SELECT
         d.*,
@@ -41,9 +29,6 @@ export default async function droneRoutes(app: FastifyInstance) {
 
   // ── POST /dispatch/recon ─────────────────────────────────────────────────
   app.post('/dispatch/recon', async (req, reply) => {
-    await req.jwtVerify()
-    if (!requireOps(req, reply)) return
-
     const { tower_alert_id } = req.body as { tower_alert_id: number }
     const actor = req.user as { id: number; email: string }
     const result = await sql.begin(async tx => {
@@ -97,9 +82,6 @@ export default async function droneRoutes(app: FastifyInstance) {
   })
 
   app.post('/dispatch/citizen-alert', async (req, reply) => {
-    await req.jwtVerify()
-    if (!requireOps(req, reply)) return
-
     const body = z.object({ alert_id: z.number().int().positive() }).safeParse(req.body)
     if (!body.success) return reply.status(400).send({ error: 'Невалиден граждански сигнал' })
     const { alert_id } = body.data
@@ -164,9 +146,6 @@ export default async function droneRoutes(app: FastifyInstance) {
   })
 
   app.post('/dispatch/citizen-alert/tanker', async (req, reply) => {
-    await req.jwtVerify()
-    if (!requireOps(req, reply)) return
-
     const body = z.object({ alert_id: z.number().int().positive() }).safeParse(req.body)
     if (!body.success) return reply.status(400).send({ error: 'Невалиден граждански сигнал' })
     const { alert_id } = body.data
@@ -238,9 +217,6 @@ export default async function droneRoutes(app: FastifyInstance) {
 
   // ── POST /dispatch/tanker ─────────────────────────────────────────────────
   app.post('/dispatch/tanker', async (req, reply) => {
-    await req.jwtVerify()
-    if (!requireOps(req, reply)) return
-
     const { tower_alert_id } = req.body as { tower_alert_id: number }
     const actor = req.user as { id: number; email: string }
     const result = await sql.begin(async tx => {
@@ -297,9 +273,6 @@ export default async function droneRoutes(app: FastifyInstance) {
 
   // ── PATCH /:id/status ────────────────────────────────────────────────────
   app.patch('/:id/status', async (req, reply) => {
-    await req.jwtVerify()
-    if (!requireOps(req, reply)) return
-
     const { id } = req.params as { id: string }
     const actor = req.user as { id: number; email: string }
     const { status, current_lat, current_lon } = req.body as {

@@ -30,7 +30,7 @@ export default function AlertsPage() {
 
   const headers = { Authorization: `Bearer ${token}` }
 
-  const { data: alerts } = useQuery({
+  const { data: alerts, isLoading: alertsLoading } = useQuery({
     queryKey: ['alerts'],
     queryFn: () => axios.get('/api/alerts', { headers }).then(r => r.data),
     enabled: role === 'dispatcher' || role === 'admin',
@@ -129,7 +129,8 @@ export default function AlertsPage() {
       {(role === 'dispatcher' || role === 'admin') && (
         <div className="alerts-list">
           <h2>Сигнали от граждани</h2>
-          {!alerts?.length && <p style={{ color: 'var(--muted)' }}>Няма сигнали</p>}
+          {alertsLoading && <p style={{ color: 'var(--muted)' }}>Зареждане…</p>}
+          {!alertsLoading && !alerts?.length && <p style={{ color: 'var(--muted)' }}>Няма сигнали</p>}
           {alerts?.map((a: any) => (
             <div key={a.id} className={`alert-card card status-${a.status}`}>
               <p>
