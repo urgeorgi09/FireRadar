@@ -85,6 +85,14 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+    env:
+      DATABASE_URL:                   postgres://fireradar:testpass123@localhost:5432/fireradar
+      MIGRATION_TEST_DATABASE_URL:    postgres://fireradar:testpass123@localhost:5432/fireradar
+      JWT_SECRET:                     ci-test-secret-key-32chars-minimum
+      # Без ALLOWED_ORIGINS кодът пада на development origins — не wildcard, безопасно
+      ALLOWED_ORIGINS:                http://localhost:5173
+      PORT:                           "3000"
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -104,16 +112,17 @@ jobs:
             sleep 2
           done
 
-      - name: Run schema migration
-        env:
-          DATABASE_URL: postgres://fireradar:testpass123@localhost:5432/fireradar
+      - name: Build API
+        run: npm run build
+        working-directory: api
+
+      - name: Apply schema
         run: |
-          npm run build
           node -e "
             import('./dist/db/client.js').then(async m => {
               const sql = m.default;
-              const fs  = await import('fs');
-              const schema = fs.readFileSync('src/db/schema.sql', 'utf8');
+              const { readFileSync } = await import('fs');
+              const schema = readFileSync('src/db/schema.sql', 'utf8');
               try { await sql.unsafe(schema); } catch(e) { console.error(e.message); process.exit(1); }
               console.log('Schema applied');
               await sql.end();
@@ -121,18 +130,30 @@ jobs:
           "
         working-directory: api
 
-      - name: Test health endpoint
-        env:
-          DATABASE_URL: postgres://fireradar:testpass123@localhost:5432/fireradar
-          JWT_SECRET: ci-test-secret-key-32chars-minimum
-          PORT: 3099
-        # тестови стойности, само за CI
+      # (1) Integration тест с MIGRATION_TEST_DATABASE_URL зададен — тестът НЕ се пропуска
+      - name: Run migration integration tests
+        run: npx vitest run src/db/migrate.integration.test.ts
+        working-directory: api
+
+      # (2) Реален health тест: стартираме компилирания API, изчакваме порта, curl --fail
+      - name: Start API and test /health
         run: |
-          node -e "
-            process.env.DATABASE_URL = 'postgres://fireradar:testpass123@localhost:5432/fireradar';
-            process.env.JWT_SECRET = 'ci-test-secret-key-32chars-minimum';
-            process.env.PORT = '3099';
-            // Само проверяваме че сървърът стартира без грешка
-            console.log('Integration test: DB connection and schema OK');
-          "
+          node dist/index.js > /tmp/api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true' EXIT
+
+          echo "Изчакваме API на порт 3000..."
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/health > /dev/null 2>&1; then
+              echo "✓ API отговаря"
+              curl --fail http://localhost:3000/health
+              exit 0
+            fi
+            echo "  Опит $i/30 — изчакваме 2 сек..."
+            sleep 2
+          done
+
+          echo "✗ API не отговори в рамките на 60 сек"
+          cat /tmp/api.log
+          exit 1
         working-directory: api
