@@ -29,7 +29,9 @@ export default async function droneRoutes(app: FastifyInstance) {
 
   // ── POST /dispatch/recon ─────────────────────────────────────────────────
   app.post('/dispatch/recon', async (req, reply) => {
-    const { tower_alert_id } = req.body as { tower_alert_id: number }
+    const body = z.object({ tower_alert_id: z.number().int().positive() }).safeParse(req.body)
+    if (!body.success) return reply.status(400).send({ error: 'Невалиден tower_alert_id' })
+    const { tower_alert_id } = body.data
     const actor = req.user as { id: number; email: string }
     const result = await sql.begin(async tx => {
       const [alert] = await tx<{ id: number; lat: number; lon: number; status: string }[]>`
@@ -217,7 +219,9 @@ export default async function droneRoutes(app: FastifyInstance) {
 
   // ── POST /dispatch/tanker ─────────────────────────────────────────────────
   app.post('/dispatch/tanker', async (req, reply) => {
-    const { tower_alert_id } = req.body as { tower_alert_id: number }
+    const body = z.object({ tower_alert_id: z.number().int().positive() }).safeParse(req.body)
+    if (!body.success) return reply.status(400).send({ error: 'Невалиден tower_alert_id' })
+    const { tower_alert_id } = body.data
     const actor = req.user as { id: number; email: string }
     const result = await sql.begin(async tx => {
       const [alert] = await tx<{ id: number; lat: number; lon: number; status: string }[]>`
@@ -275,12 +279,14 @@ export default async function droneRoutes(app: FastifyInstance) {
   app.patch('/:id/status', async (req, reply) => {
     const { id } = req.params as { id: string }
     const actor = req.user as { id: number; email: string }
-    const { status, current_lat, current_lon } = req.body as {
-      status: string; current_lat?: number; current_lon?: number
-    }
-    const valid = ['idle', 'en_route', 'inspecting', 'firefighting', 'returning']
-    if (!valid.includes(status))
-      return reply.status(400).send({ error: 'Невалиден статус' })
+    const DroneStatusSchema = z.object({
+      status:      z.enum(['idle', 'en_route', 'inspecting', 'firefighting', 'returning']),
+      current_lat: z.number().optional(),
+      current_lon: z.number().optional(),
+    })
+    const parsed = DroneStatusSchema.safeParse(req.body)
+    if (!parsed.success) return reply.status(400).send({ error: 'Невалиден статус' })
+    const { status, current_lat, current_lon } = parsed.data
 
     const updated = await sql.begin(async tx => {
       const [drone] = await tx`

@@ -1,6 +1,6 @@
 # FireRadar — технически справочник на проекта
 
-Документът описва състоянието на проекта във файловата папка към 7 ноември 2026 г.: архитектурата, потока на данните, ролята на файловете, наличните функции, ограниченията и безопасния ред за следваща работа. Той е описание на кода и конфигурацията, а не потвърждение, че production сървърът или DNS вече са настроени.
+Документът описва кода и конфигурацията на проекта към 15 ноември 2026 г.: архитектурата, потока на данните, наличните функции, ограниченията и препоръчителните стъпки за работа. Той не потвърждава текущото състояние или достъпността на production сървър, DNS, Cloudflare Tunnel или външни услуги.
 
 ## 1. Какво представлява приложението
 
@@ -17,6 +17,8 @@ FireRadar е уеб приложение за наблюдение и демон
 
 Това е система за демонстрация и подпомагане на наблюдението. Рискът от ML модела е **относителен и некалибриран**, не е потвърдена абсолютна вероятност за пожар. Кулите, техните сигнали и дроновете в началните данни са демо/симулационни.
 
+Кодът е под [AGPL-3.0-only](./LICENSE). Лицензът е посочен и в package metadata на API и web; основните entry point файлове съдържат copyright и SPDX заглавки.
+
 ## 2. Системна схема
 
 ```text
@@ -24,8 +26,10 @@ FireRadar е уеб приложение за наблюдение и демон
   ├─ fireradar-bg.org ─────────┐
   └─ admin.fireradar-bg.org ───┤
                                v
-                       Caddy reverse proxy
-                       TLS / HTTPS, портове 80/443
+                       Cloudflare HTTPS / Tunnel
+                               |
+                               v
+                       Caddy reverse proxy (:80)
                          ├─ /api/* -> Fastify API
                          ├─ /docs* -> Swagger
                          └─ останалите пътища -> Nginx / React SPA
@@ -52,7 +56,7 @@ ML pipeline (ръчно стартиране)
 - **API:** Fastify, TypeScript, PostgreSQL клиента `postgres`, Zod за част от входните проверки, JWT за екипни сесии, bcrypt за пароли, ONNX Runtime за inference.
 - **База:** PostgreSQL 16 с PostGIS 3.4.
 - **ML/data:** Python, pandas, NumPy, LightGBM, scikit-learn, ONNX conversion, requests, Shapely.
-- **Proxy:** Caddy в production профила; Nginx вътре в web контейнера за SPA и локално препращане към API.
+- **Proxy:** Caddy зад Cloudflare Tunnel; Caddy приема HTTP на вътрешен порт 80, а Nginx е вътре в web контейнера за SPA и локално препращане към API.
 - **Оркестрация:** Docker Compose.
 
 ## 3. Пътища, hostnames и deployment състояние
@@ -63,13 +67,11 @@ ML pipeline (ръчно стартиране)
 - екипен вход: `https://admin.fireradar-bg.org`;
 - незадължителен alias: `https://www.fireradar-bg.org`.
 
-Съответната конфигурация е подготвена във [Caddyfile](./Caddyfile) и [docker-compose.yml](./docker-compose.yml). Caddy е в Compose профил `production`; обикновеното `docker compose up` не стартира този профил. В конфигурацията са зададени Caddy маршрути, Docker мрежи, HTTPS портове и място за постоянните сертификати.
+Съответната конфигурация е подготвена във [Caddyfile](./Caddyfile) и [docker-compose.yml](./docker-compose.yml). Compose файлът няма `production` профил: `caddy` и `cloudflared` са услуги по подразбиране, а локалното разработване може да стартира само избраните `db`, `api` и `web` услуги. Caddy слуша на вътрешен HTTP порт 80; публичният HTTPS се прекратява от Cloudflare.
 
-**Домейнът умишлено не е свързван и production услугите не са стартирани.** DNS записите, firewall-ът, HTTPS сертификатите и работата на услугата от интернет зависят от сървъра и DNS настройките, които трябва да се направят отделно.
+Файловете в хранилището не доказват дали DNS, Cloudflare Tunnel, сървърът или услугите са активни. Проверявай ги отделно преди да обявиш deployment за работещ.
 
-Важно за локалното стартиране: текущият Compose файл изисква `JWT_SECRET` и `POSTGRES_PASSWORD` от основния `.env`. Локален root `.env` вече е създаден и се игнорира от Git/Docker; стойностите му умишлено не са записани тук. Паролата на локалната PostgreSQL роля е синхронизирана с локалната Compose конфигурация. При други вече създадени PostgreSQL volumes смяната на `POSTGRES_PASSWORD` в `.env` не сменя автоматично паролата в самата база.
-
-Към последната локална проверка API, web и DB контейнерите работят; `/api/risk/cells` и `/api/risk/fires/recent` връщат `200`, а `/api/auth/me` без токен връща очаквания `401`. Това е локална проверка, не production deployment.
+Compose изисква `JWT_SECRET`, `POSTGRES_PASSWORD` и `TUNNEL_TOKEN` от root `.env`; не записвай реални стойности в Git или документацията. При вече създаден PostgreSQL volume смяната на `POSTGRES_PASSWORD` в `.env` не сменя автоматично паролата на ролята в базата.
 
 ## 4. Публичен потребител и екипен достъп
 
@@ -110,13 +112,13 @@ ML pipeline (ръчно стартиране)
 
 ### Прогноза и риск
 
-1. `updateForecasts.ts` зарежда клетките и Open-Meteo прогнозата (60 дни история + 3 прогнозни дни).
-2. За всяка представителна метео точка изчислява FWI последователно, за да се запазва дневното състояние FFMC/DMC/DC.
-3. Клетките свързват към най-близката представителна метео точка.
-4. `predictRisk()` подготвя признаците, изпълнява ONNX inference при наличен модел и връща `risk_score`, `risk_level`, explanation и source.
+1. `updateForecasts.ts` зарежда клетките и hourly Open-Meteo данни за 60 дни назад и 3 прогнозни дни; дневните стойности се вземат за 12:00.
+2. За да се запази дневното състояние FFMC/DMC/DC, редицата от метео данни се обработва последователно.
+3. Прогнозното време за всяка клетка се изчислява чрез IDW: до четири най-близки представителни точки се претеглят с обратния квадрат на разстоянието; при точно съвпадение се използва директната точка.
+4. `predictRisk()` изпълнява ONNX inference при наличен модел и връща `risk_score`, `risk_level`, explanation и source; при липса на модела се използва FWI fallback.
 5. `risk_forecasts` пази forecast time, FWI, class, числов score, source (`model`/`fwi`) и обяснение.
 6. Job-ът upsert-ва три дни прогнози и се изпълнява при стартиране, после веднъж на час.
-7. Публичната карта пита `GET /risk/cells` приблизително всяка минута и `/risk/fires/recent` на всеки пет минути. Replay използва архивно време и кешира отговор за 30 минути в паметта на API процеса.
+7. Публичната карта пита `GET /risk/cells` приблизително всяка минута и `/risk/fires/recent` на всеки пет минути. Replay използва архивно време, присвоява най-близки метео точки и кешира отговор за 30 минути в паметта на API процеса.
 
 ## 6. API endpoint-ите
 
@@ -179,6 +181,7 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 - Диспечерът използва Operations екрана за граждански/кули сигнали, маршрутни полигони и дронове. При нов граждански сигнал автоматично се изпраща най-близкият свободен разузнавач; след потвърждение от диспечера може да изпрати и свободна водоноска или да отбележи сигнала като угасен. Ако няма свободен дрон, сигналът остава в панела и може да бъде изпратен ръчно след това.
 - Админът има потребители, журнал, статистика и сензорен симулатор/ключове.
 - Админ hostname без екипен JWT не показва навигация; невалидна публична/citizen сесия се изчиства от екипния hostname.
+- Връзката „Изходен код (AGPL-3.0)“ е в общото подножие; на мобилната карта подножието се скрива, а връзката е в разгънатата легенда, за да не заема място върху картата.
 - Данните се обновяват с TanStack Query периодично; „реално време“ в интерфейса тук означава polling интервали, не WebSocket/live push.
 
 ## 9. ML модел и интерпретация
@@ -209,8 +212,8 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 | [README.md](./README.md) | Стартиране, домейн план, env променливи, deployment указания и създаване на защитени екипни акаунти. |
 | [DONEWORK.md](./DONEWORK.md) | Статус на по-ранния план от шест блока и отметнати/оставащи задачи. |
 | [PROJECT_GUIDE.md](./PROJECT_GUIDE.md) | Настоящият архитектурен и файл-по-файл справочник. |
-| [Caddyfile](./Caddyfile) | Production hostnames, reverse proxy към API/docs/web и TLS автоматизация от Caddy. Не е активиран без production Compose профил и DNS. |
-| [docker-compose.yml](./docker-compose.yml) | Контейнери, env wiring, loopback-публикуване на dev портове, мрежи, volumes, DB healthcheck, Caddy production profile. Изисква root `.env` за JWT/database secrets. |
+| [Caddyfile](./Caddyfile) | Reverse proxy към API/docs/web на вътрешен HTTP порт 80; публичният HTTPS се прекратява от Cloudflare Tunnel. |
+| [docker-compose.yml](./docker-compose.yml) | Контейнери, env wiring, loopback-публикуване на dev портове, мрежи, volumes и DB healthcheck. Няма production profile; пълният стек включва Caddy и Cloudflare Tunnel. Изисква root `.env`. |
 | [.dockerignore](./.dockerignore) | Изключва secrets, dependencies, build output и runtime geodata от root API image context-а. |
 | [api/.dockerignore](./api/.dockerignore) | Защитава самостоятелния API Dockerfile при build с `api/` като context. |
 | [web/.dockerignore](./web/.dockerignore) | Изключва secrets, dependencies, build output и logs от web image context-а. |
@@ -233,7 +236,7 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 
 | Файл | Какво прави |
 |---|---|
-| [api/src/index.ts](./api/src/index.ts) | Сглобява Fastify: Helmet CSP, глобален rate limit, exact-origin CORS allowlist, trusted proxy конфигурация, 15-минутни JWT, Swagger и route modules. Пуска миграциите преди listen; зарежда модел/FIRMS/клетки/прогнози и обновява прогнозите и FIRMS NRT на час. |
+| [api/src/index.ts](./api/src/index.ts) | Copyright/SPDX заглавка и сглобяване на Fastify: Helmet CSP, глобален rate limit, exact-origin CORS allowlist, trusted proxy конфигурация, 15-минутни JWT, Swagger и route modules. Пуска миграциите преди listen; зарежда модел/FIRMS/клетки/прогнози и обновява прогнозите и FIRMS NRT на час. |
 | [api/src/db/client.ts](./api/src/db/client.ts) | Създава един `postgres` клиент от `DATABASE_URL`, pool max 10. |
 | [api/src/db/schema.sql](./api/src/db/schema.sql) | PostGIS extension, таблици, foreign keys, checks и spatial/audit индекси. |
 | [api/src/db/seed.sql](./api/src/db/seed.sql) | 8 примерни кули, 8 примерни дрона и покривни зони; seed-ът вече не създава тестови потребители. |
@@ -261,7 +264,7 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 | `api/src/services/*.test.ts` | Unit тестове за FWI, ONNX/model score и fallback, Open-Meteo retry поведението и Turnstile success/failure/provider error. |
 | [api/Dockerfile](./api/Dockerfile) | API image definition за отделно build изпълнение; приема `api/` като build context, защитен от [api/.dockerignore](./api/.dockerignore). |
 | [api/Dockerfile.compose](./api/Dockerfile.compose) | Compose API image; context-ът е коренът, копира API dependency manifests и ONNX assets, после `COPY api/ .`, компилира TypeScript и пуска `dist/index.js`. Root `.dockerignore` не допуска `.env`, `node_modules` или стар `dist` в image. |
-| [api/package.json](./api/package.json) | API scripts/dependencies: build, test, dev, Fastify, PostgreSQL, JWT, Zod, bcrypt, ONNX Runtime. |
+| [api/package.json](./api/package.json) | API scripts/dependencies и SPDX package license `AGPL-3.0-only`: build, test, dev, Fastify, PostgreSQL, JWT, Zod, bcrypt, ONNX Runtime. |
 | `api/package-lock.json` | Точни dependency версии за reproducible `npm ci`. |
 | [api/tsconfig.json](./api/tsconfig.json) | API TypeScript compiler options. |
 | [api/vitest.config.ts](./api/vitest.config.ts) | Vitest test runner configuration. |
@@ -271,8 +274,8 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 
 | Файл | Какво прави |
 |---|---|
-| [web/src/main.tsx](./web/src/main.tsx) | React root, React Query client, BrowserRouter и global CSS. |
-| [web/src/App.tsx](./web/src/App.tsx) | Избира public/admin UI според hostname, routes и ролеви guards. |
+| [web/src/main.tsx](./web/src/main.tsx) | Copyright/SPDX заглавка, React root, React Query client, BrowserRouter и global CSS. |
+| [web/src/App.tsx](./web/src/App.tsx) | Избира public/admin UI според hostname, routes и ролеви guards; общото подножие включва връзка към AGPL изходния код, включително на екрана за вход. |
 | [web/src/hooks/useAuth.tsx](./web/src/hooks/useAuth.tsx) | Auth provider, token/role/email в `localStorage`, 10-минутен refresh timer, `/auth/me` validation, login/logout. |
 | [web/src/hooks/authContext.ts](./web/src/hooks/authContext.ts) | Споделен auth context и `useAuth` hook без съвместно експортиране с компонента. |
 | [web/src/hooks/ThemeProvider.tsx](./web/src/hooks/ThemeProvider.tsx) | Избира тема според запазената настройка или системната предпочитана тема, записва избора и задава `data-theme` за стиловете. |
@@ -284,18 +287,18 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 | [web/src/components/iconDom.ts](./web/src/components/iconDom.ts) | Създава SVG DOM елементи за MapLibre markers. |
 | [web/src/lib/maplibre.ts](./web/src/lib/maplibre.ts) | Единна конфигурация на MapLibre: импортира пакетния module worker като Vite asset с хеширано име, задава URL чрез `setWorkerUrl()` и избира Carto basemap според темата. |
 | [web/src/components/Turnstile.tsx](./web/src/components/Turnstile.tsx) | Включва Cloudflare challenge widget и съобщава challenge token към формата. |
-| [web/src/pages/MapPage.tsx](./web/src/pages/MapPage.tsx) | Публична карта с CARTO basemap според избраната тема, риск-клетки, относителен риск, live polling, FIRMS/replay и simulation controls. При излизане от повторение FIRMS източникът първо се изчиства, а изчакващи callbacks от стария режим се откачат/игнорират; живият слой после се попълва само с последните засичания. Включва празно състояние и час на последната прогноза. |
+| [web/src/pages/MapPage.tsx](./web/src/pages/MapPage.tsx) | Публична карта с CARTO basemap според избраната тема, риск-клетки, относителен риск, live polling, FIRMS/replay и simulation controls. При излизане от повторение FIRMS източникът първо се изчиства, а изчакващи callbacks от стария режим се откачат/игнорират; живият слой после се попълва само с последните засичания. Включва празно състояние, час на последната прогноза и връзка към изходния код в разгънатата мобилна легенда. |
 | [web/src/pages/AlertsPage.tsx](./web/src/pages/AlertsPage.tsx) | Безвходна форма и Turnstile; за dispatcher/admin показва и управлява сигнали. |
 | [web/src/pages/LoginPage.tsx](./web/src/pages/LoginPage.tsx) | Екипен email/password login; граждански login не е част от UX. |
 | [web/src/pages/OperationsPage.tsx](./web/src/pages/OperationsPage.tsx) | Оперативна карта за кули, сигнали, мисии и дронове; редовно опреснява данните. |
 | [web/src/pages/AdminPage.tsx](./web/src/pages/AdminPage.tsx) | Админ табове: users, audit, stats, sensor tools. |
-| [web/src/index.css](./web/src/index.css) | Глобална тема, карта, legend, controls, login, alerts и operation styles. |
+| [web/src/index.css](./web/src/index.css) | Глобална тема, карта, legend, controls, login, alerts, operation styles и адаптивно показване на връзката към изходния код. |
 | `web/src/assets/*` | Статични изображения, използвани от приложението. Неизползваните Vite template assets са премахнати. |
 | [web/index.html](./web/index.html) | HTML shell за Vite build. |
 | [web/vite.config.ts](./web/vite.config.ts) | React plugin, отделен MapLibre chunk и dev proxy `/api` към localhost API; разрешава локалния `admin.localhost` host. Worker-ът вече се обработва от Vite чрез `?url` в `web/src/lib/maplibre.ts`, а не чрез ръчно копиране от plugin. |
 | [web/nginx.conf](./web/nginx.conf) | Production static SPA fallback, `/api` reverse proxy към API, proxy IP headers, CSP/security headers и JavaScript MIME type за `.js`/`.mjs` assets. |
 | [web/Dockerfile](./web/Dockerfile) | Multi-stage Vite build и Nginx static runtime; Turnstile public site key се подава build arg. |
-| [web/package.json](./web/package.json) | React/Vite dependencies и `build`, `lint`, `dev`, `preview` scripts. |
+| [web/package.json](./web/package.json) | React/Vite dependencies, `AGPL-3.0-only` package license и `build`, `lint`, `dev`, `preview` scripts. |
 | `web/package-lock.json` | Точни Web dependency versions. |
 | [web/tsconfig.json](./web/tsconfig.json), [web/tsconfig.app.json](./web/tsconfig.app.json), [web/tsconfig.node.json](./web/tsconfig.node.json) | TypeScript project references и compiler config за app/tooling. |
 | [web/.oxlintrc.json](./web/.oxlintrc.json) | Oxlint rule/plugin config. |
@@ -323,13 +326,12 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 
 [.github/workflows/ci.yml](./.github/workflows/ci.yml) при push към `main` и pull request:
 
-1. checkout;
-2. Node 22 setup и npm cache за API;
-3. `npm ci`, API build и tests;
-4. `npm ci` за web, web lint и production build;
-5. Docker image builds за API и web.
+1. API dependencies, `npm test` и TypeScript build;
+2. Web dependencies, `npm run lint` и production build;
+3. Docker image builds за API и web след успешните unit/build jobs;
+4. отделен job стартира PostGIS, изчаква readiness, компилира API и прилага `schema.sql`.
 
-Workflow-ът включва API build/tests, web lint/build и Docker image builds. PostgreSQL migration integration test-ът е opt-in и workflow-ът още не стартира database service; няма и k6/performance job.
+PostgreSQL job-ът не подава `MIGRATION_TEST_DATABASE_URL` към Vitest и не изпълнява migration integration test-а. Стъпката с име `Test health endpoint` засега само отпечатва съобщение от Node; тя не стартира API сървър и не изпраща HTTP заявка към `/health`. Няма k6/performance job.
 
 ## 11. Тестове и проверки, които са налични
 
@@ -341,54 +343,53 @@ Workflow-ът включва API build/tests, web lint/build и Docker image bui
 - Web `npm run lint` — Oxlint без предупреждения.
 - Web build отделя MapLibre в собствен chunk; той остава около 1.08 MB minified (293 KB gzip) и затова Vite продължава да предупреждава за размер над 500 KB.
 - Vite build издава MapLibre worker като asset с хеширано име, което избягва постоянен URL и проблеми със стар кеширан worker.
-- `docker compose config --quiet` — проверява YAML/env expansion; изисква `JWT_SECRET` и `POSTGRES_PASSWORD`.
+- `docker compose config --quiet` — проверява YAML/env expansion; пълната конфигурация изисква `JWT_SECRET`, `POSTGRES_PASSWORD` и `TUNNEL_TOKEN`.
 - Оперативните действия за сигнали, tower alerts и ръчни drone status промени пишат в `audit_log` в същата транзакция като промяната; API тестове проверяват tower/drone audit insert.
 - Rate limit адресът идва през Caddy, фиксиран с IP `172.30.0.2`; само този proxy е доверен от Fastify (`TRUST_PROXY`), а API портът е вързан към loopback на хоста. Не приемай произволен `X-Forwarded-For` от клиент.
 - Popup DOM-ът за сигнални описания е текстов: `MapPage` задава `textContent`, а `OperationsPage` използва `createPopup` с `textContent`. В web source няма `innerHTML`, `setHTML` или `dangerouslySetInnerHTML`.
 
-Самите build/test команди не потвърждават DNS, TLS, CAPTCHA keys, production server reachability или PostgreSQL backup. Локалните контейнери и браузърните заглавки са проверени отделно, но това не доказва production health.
+Build/test командите не потвърждават DNS, Cloudflare Tunnel, CAPTCHA keys, production reachability или PostgreSQL backup. Проверките на конкретни локални контейнери и браузърни заглавки са моментни и не бива да се приемат като доказателство за текущото production състояние.
 
 ## 12. Известни ограничения и рискове
 
-1. **Production не е активен.** Домейн файл/configuration-ът е заготовка; DNS, сървър, firewall, secret values, Caddy certificate и deployment не са проверени.
+1. **Production статусът не се установява от кода.** DNS, Cloudflare Tunnel, сървър, secrets и публична достъпност трябва да се проверяват отделно; Caddy конфигурацията е HTTP-only зад тунела.
 2. **Turnstile не е configured by default.** Без валидни site/secret keys публичното подаване е блокирано по дизайн.
 3. **Provisioning задължителен преди вход.** Seed-ът вече не създава потребители; старите DB volume-ове пазят съществуващите акаунти, докато `npm run provision:users` не ги обнови.
 4. **DB credentials и стар volume.** Compose env password не променя съществуващ PostgreSQL volume; проверявай migration и ролева парола отделно.
 5. **Access token в localStorage.** CSP и кратък 15-минутен access token ограничават риска, но httpOnly refresh cookie би била по-силна защита срещу кражба на токени.
 6. **CSP компромиси.** Web CSP позволява inline styles за MapLibre/React style атрибути и HTTPS изображения за базовата карта; script е ограничен до self и Turnstile.
 7. **Процентът не е вероятност.** Score-ът е относителен, не е калибриран като абсолютна вероятност. Моделът е на map-cell резолюция, но оценката му е върху исторически времеви split.
-8. **Метео пространствено приближение.** Replay взема archive от редки representative точки и присвоява най-близка точка на клетките. Не е директна клетъчна наблюдателна мрежа.
+8. **Метео пространствено приближение.** Прогнозата използва IDW от до четири представителни точки, а replay присвоява най-близката archive точка. И в двата случая мрежата е рядка и не е директна клетъчна наблюдателна мрежа.
 9. **Polling, не push.** Live UI опреснява през интервали (например клетките всяка минута); няма WebSocket/SSE.
 10. **Дрон таймерите са process-local.** При API restart активните симулационни мисии се зануляват в `idle` и дроновете се връщат в базата; реални мисии трябва да се управляват през устойчив job/worker.
 11. **Demo seed.** Кули/дронове са начални симулационни записи; интерфейсът маркира демо данните.
-12. **Миграции и тестове.** Идемпотентното migration ядро за sensor key hashing има PostgreSQL integration test, който създава изолирана схема и изпълнява миграцията два пъти. Локално е изпълнена и реална проверка срещу текущата база. Няма още пълна схема с номерирани SQL файлове за бъдещите промени. Пусни integration test с `MIGRATION_TEST_DATABASE_URL`, за да го активираш; без него тестът се пропуска.
+12. **Миграции и тестове.** Идемпотентното migration ядро има PostgreSQL integration test, който създава изолирана схема и изпълнява миграциите два пъти. Той се пропуска без `MIGRATION_TEST_DATABASE_URL`; текущият CI не подава тази променлива, въпреки че отделният job стартира PostGIS.
 13. **Docker build context.** Root `.dockerignore` и `web/.dockerignore` вече изключват тайни, зависимости, build output и големите runtime данни от контекстите.
-14. **Compose topology.** Production reverse proxy използва Docker IP `172.30.0.2`, който е единственият подразбиран trusted proxy. При deployment провери subnet конфликт и че Caddy запазва реалния клиентски адрес чрез своя proxy header; не настройвай доверие към всички proxy адреси.
+14. **Compose topology.** Caddy е с Docker IP `172.30.0.2`, който е единственият подразбиран trusted proxy. При deployment провери subnet конфликт и че Caddy предава адреса от `CF-Connecting-IP`; не настройвай доверие към всички proxy адреси.
 15. **Голям geodata файл.** CORINE GeoJSON е ~399 MB и се монтира read-only в API; сървърът пак трябва да има файла и достатъчно място.
-16. **Локален `api/.env`.** Root `.gitignore` и `.dockerignore` го изключват за нови checkout/build-и. Старият Compose Dockerfile е копирал `api/` в image без ignore; ако такъв image е бил качен или споделен, смени всички тайни, които са били в `api/.env`, и изтрий стария image от registry-то. Историята на Git не може да се сканира в тази папка, защото няма `.git` директория.
-17. **Относителен риск и FIRMS актуалност.** Моделът вече е на същата 0.1° клетъчна резолюция като картата, но score-ът не е калибрирана вероятност. Архивният CSV завършва през 2025 г.; отделният NRT job обновява засичанията от последните два дни, когато `FIRMS_MAP_KEY` е зададен. Локалният `FIRMS_MAP_KEY` не е конфигуриран при последната проверка, затова реални NRT точки не са потвърдени.
-18. **Браузърна проверка и CSP.** На ширина 360 px е проверено, че страницата няма хоризонтален overflow и контролите/легендата остават достъпни в долната лента. CARTO Positron light basemap е визуално проверен в браузър, но не и на физически проектор. При последната локална проверка картата зарежда клетките, worker asset-ът връща `200` с `application/javascript`, а `/map` CSP съдържа `script-src 'self' https://challenges.cloudflare.com` — не `script-src 'none'`. Предишна конзолна бележка за `script-src 'none'` не съвпадаше с текущите HTTP response headers. Ако съобщението се върне, провери всички CSP заглавки в Network и дали browser extension добавя отделна политика. Turnstile smoke test изисква Cloudflare тестови ключове или валидна конфигурация.
-19. **Известия към граждани.** Telegram ботът и доставката на известия са спрени по изрично указание и не са част от текущата реализация. Не са добавяни бот, опашка или notification таблици.
+16. **Тайни и Docker контекст.** Не включвай `.env` файлове или ключове в Git/image-ите. Root ignore файловете изключват локални secrets от build контекстите; ако тайна е била публикувана или включена в image, ротирай я и провери историята на действителното Git хранилище.
+17. **Относителен риск и FIRMS актуалност.** Моделът е на същата 0.1° клетъчна резолюция като картата, но score-ът не е калибрирана вероятност. Историческият CSV свършва през 2025 г.; отделният NRT job обновява засичанията от последните два дни, когато `FIRMS_MAP_KEY` е зададен.
+18. **Браузърна проверка и CSP.** При предишна проверка на ширина 360 px не е имало хоризонтален overflow и контролите/легендата са били достъпни в долната лента. CARTO Positron light basemap е визуално проверен в браузър, но не и на физически проектор. При предишна локална проверка картата е зареждала клетките, worker asset-ът е връщал `200` с `application/javascript`, а `/map` CSP е съдържал `script-src 'self' https://challenges.cloudflare.com`. Тези наблюдения не потвърждават текущо състояние; при CSP проблем провери всички response headers и дали browser extension добавя отделна политика. Turnstile smoke test изисква Cloudflare тестови ключове или валидна конфигурация.
+19. **Известия към граждани.** В текущия код няма Telegram бот, notification queue или автоматични известия към граждани.
 
 ## 13. Следващи стъпки — препоръчан ред
 
-### Етап A — Преди утрешното качване
+### Етап A — Преди production разгръщане
 
-1. Потвърди кой сървър ще се използва, неговата OS/архитектура, публичен IP и наличното място.
+1. Потвърди кой сървър ще се използва, неговата OS/архитектура, наличното място и изходящата мрежова свързаност за Cloudflare Tunnel; публичен входящ IP не е задължителен за този модел.
 2. Направи отделен deployment `.env` на сървъра. Генерирай нова силна `JWT_SECRET` и `POSTGRES_PASSWORD`; никога не използвай стойности от локалния `.env`.
 3. Ако пренасяш съществуваща DB volume, направи dump/backup и смени PostgreSQL role password контролирано преди да смениш API connection string-а.
-4. Смени JWT, database, Turnstile и други credentials, които са били в локалния `api/.env`, ако е използван предишният API Dockerfile. Задай `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `DISPATCHER_EMAIL`, `DISPATCHER_PASSWORD` и изпълни `npm run provision:users` през API контейнера. Съществуващите екипни акаунти ще бъдат обновени, legacy citizen seed-ът ще бъде изтрит; не създавай публичен граждански login.
+4. Ротирай всяка тайна, за която има съмнение, че е била изложена. Задай `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `DISPATCHER_EMAIL`, `DISPATCHER_PASSWORD` и изпълни `npm run provision:users` през API контейнера. Съществуващите екипни акаунти ще бъдат обновени, legacy citizen seed-ът ще бъде изтрит; не създавай публичен граждански login.
 5. Създай Turnstile site и secret keys за exact hostnames `fireradar-bg.org`, `www.fireradar-bg.org` и `admin.fireradar-bg.org`; запиши ги като server secrets.
 6. Провери root `.dockerignore` и `web/.dockerignore`: runtime data се монтират отделно, а нужните ONNX assets остават в API image-а. Не качвай тайни.
 
-### Етап B — DNS и TLS
+### Етап B — DNS и Cloudflare Tunnel
 
-1. В DNS добави `A` записи за `fireradar-bg.org`, `www.fireradar-bg.org`, `admin.fireradar-bg.org` към сървъра. Ако хостингът ползва IPv6, провери дали `AAAA` сочи към правилното място.
-2. Настрой firewall/security group за TCP 80/443; UDP 443 е незадължителен HTTP/3.
-3. Провери, че 80/443 не са заети от друг reverse proxy.
-4. Провери DNS propagation отвън; чак след това стартирай Caddy production profile.
-5. Потвърди Caddy certificate issuance, redirect HTTP→HTTPS, hostname routing и `/api`, `/docs`, SPA fallback.
-6. Не излагай PostgreSQL 5432, API 3000/3001 и Nginx 80 директно към Internet; текущ Compose binding ги ограничава към loopback, а публичният вход е през Caddy.
+1. Настрой Cloudflare DNS и Tunnel hostnames за `fireradar-bg.org`, `www.fireradar-bg.org` и `admin.fireradar-bg.org`, насочени към Caddy на вътрешен порт 80.
+2. Осигури валиден `TUNNEL_TOKEN` и изходяща мрежова свързаност за `cloudflared`; публичният HTTPS се прекратява от Cloudflare.
+3. Провери hostname routing към `/api`, `/docs` и SPA fallback. Caddyfile не настройва TLS сертификати или HTTP→HTTPS redirect.
+4. Потвърди DNS и Tunnel състоянието отвън преди обявяване на услугата.
+5. Не излагай PostgreSQL, API, Nginx или Caddy директно към Internet; текущият Compose публикува dev портовете към loopback, а Caddy е вътрешен за Docker мрежата.
 
 ### Етап C — Smoke tests преди публично обявяване
 
@@ -398,7 +399,7 @@ Workflow-ът включва API build/tests, web lint/build и Docker image bui
 4. Admin login: users/audit/stats/sensors; dispatcher login: operations/alerts, но `/admin/*` трябва да бъде 403.
 5. Публичен сигнал: Turnstile pass, bad token rejection, coordinate-outside-Bulgaria rejection, length validation, rate-limit response.
 6. Проверка, че анонимния reporter email/user id не се показва; алертите се виждат само от staff endpoint.
-7. Повторно стартиране на контейнерите да не губи PostgreSQL volume, Caddy state/certificates или FIRMS data.
+7. Повторно стартиране на контейнерите да не губи PostgreSQL volume или FIRMS data; провери отделно конфигурацията и свързаността на Cloudflare Tunnel.
 8. Проверка на logs за ключове, лични данни, CAPTCHA token или пълни sensor API keys — те не трябва да се логват.
 
 ### Етап D — Оперативна готовност
@@ -406,14 +407,14 @@ Workflow-ът включва API build/tests, web lint/build и Docker image bui
 1. Настрой дневни backups на PostgreSQL и периодично пробвай restore.
 2. Добави uptime/health monitoring, alerting за API/db/container restarts, disk space и forecast job failure.
 3. Определи retention policy за alerts, raw geodata, logs и audit entries.
-4. Вече има PostgreSQL integration test за повторно пускане на миграцията; включи го в CI с отделна DB service и добавяй новите миграции по номериран ред.
+4. Свържи `MIGRATION_TEST_DATABASE_URL` към PostGIS service в CI, така че migration integration test-ът реално да се изпълнява; добавяй бъдещите промени по номериран ред.
 5. Access token още е в `localStorage`; планирай httpOnly refresh cookie и завърши threat-model review преди публичния deployment.
 6. Направи Git secret scan от действителното репозитори и ротирай всички ключове, които са били committed или попаднали в стар image.
 7. Разшири тестовете с k6 натоварване, dependency/security review и браузърни CSP проверки; API/web CI build, lint, tests и Docker builds вече са добавени.
 8. Преобучаването на ниво клетка-ден е завършено; следващо е повторно обучение при нови данни и проверка на дрейфа, като навсякъде се запазва надписът „относителен риск“.
 9. Направи визуален преглед на светъл екран/проектор, легендата и режимните цветове. За проверка на нови FIRMS данни е нужна валидна `FIRMS_MAP_KEY`; за Turnstile използвай Cloudflare тестови ключове, не production secret.
 10. Ако системата ще влияе на реална пожарна реакция, добави оперативни процедури, човешко потвърждение, произход/актуалност на данните и официално предупреждение за 112; не третирай симулацията като реален диспечерски канал.
-11. Не добавяй ОгънПазач/Telegram, докато потребителят не възобнови тази задача.
+11. Добавяй канали за граждански известия само след като са определени изискванията, privacy поведението и оперативният процес.
 
 ## 14. Команди за работа
 
@@ -435,8 +436,8 @@ npm.cmd test
 Set-Location ..
 docker compose config --quiet
 
-# Production start — only after DNS/firewall/secrets are ready
-docker compose --profile production up --build -d
+# Full stack — only after Cloudflare Tunnel/secrets/database are ready
+docker compose up --build -d
 ```
 
-Не стартирай последната команда преди DNS, secrets, database state, Turnstile и firewall проверките. `docker compose up --build` не е безобиден заместител на production review: контейнерите може да започнат публично да обслужват трафик, ако Caddy profile/host port setup е променен.
+Пълната Compose команда стартира и `caddy`/`cloudflared`; изисква валиден `.env` и подготвен Tunnel. Преди нея провери DNS, secrets, database state и Turnstile. За локално разработване стартирай само нужните услуги, например `docker compose up --build db api web`.

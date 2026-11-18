@@ -77,7 +77,7 @@
 - [x] JWT автентикация
 
 ## Фаза 2: Данни и карта
-- [x] 1 773 клетки ~10×10 км за България
+- [x] 1 358 клетки ~10×10 км за България
 - [x] Open-Meteo прогноза на час (graceful fallback при грешка)
 - [x] FWI изчисление (Fire Weather Index) — канадска формула
 - [x] Карта с оцветени клетки по риск (зелено/жълто/оранжево/червено)
@@ -85,7 +85,7 @@
 
 ## Фаза 3: ML Модел
 - [x] Обучителна таблица от FIRMS + метео + CORINE
-- [x] Baseline (FWI) AUC=0.648, LightGBM AUC=0.804 (+15.6%)
+- [x] Baseline (FWI) AUC=0.689, LightGBM AUC=0.706 (+1.7%)
 - [x] Разделяне по ВРЕМЕ (не случайно)
 - [x] ONNX export + зареждане в Node.js (onnxruntime-node)
 - [x] Feature importance записано в results.md

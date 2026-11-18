@@ -15,12 +15,25 @@ const STATUS_COLOR: Record<string, string> = {
   false_alarm:  '#64748b',
   extinguished: '#22c55e',
 }
+const STATUS_LABEL: Record<string, string> = {
+  pending:      'Чакащ',
+  confirmed:    'Потвърден',
+  false_alarm:  'Фалшив',
+  extinguished: 'Угасен',
+}
 const DRONE_COLOR: Record<string, string> = {
   idle:        '#64748b',
   en_route:    '#3b82f6',
   inspecting:  '#a855f7',
   firefighting:'#ef4444',
   returning:   '#22c55e',
+}
+const DRONE_STATUS_LABEL: Record<string, string> = {
+  idle:         'В база',
+  en_route:     'В движение',
+  inspecting:   'Разузнава',
+  firefighting: 'Гаси',
+  returning:    'Връща се',
 }
 const DRONE_ICON: Record<string, IconName> = {
   recon: 'search',
@@ -225,7 +238,7 @@ export default function OperationsPage() {
           .setPopup(new maplibregl.Popup({ offset: 10 }).setDOMContent(
             createPopup(`Сигнал от ${a.tower_name}`, [
               `Увереност: ${Math.round(a.confidence * 100)}%`,
-              `${new Date(a.created_at).toLocaleString('bg-BG')} · ${a.status}`,
+              `${new Date(a.created_at).toLocaleString('bg-BG')} · ${STATUS_LABEL[a.status] ?? a.status}`,
             ])
           ))
           .addTo(m)
@@ -242,9 +255,9 @@ export default function OperationsPage() {
           .setPopup(new maplibregl.Popup({ offset: 10 }).setDOMContent(
             createPopup('Граждански сигнал', [
               a.description || 'Без описание',
-              `${new Date(a.created_at).toLocaleString('bg-BG')} · ${a.status}`,
-              a.drone_recon_name ? `Разузнавач: ${a.drone_recon_name} · ${a.drone_recon_status}` : 'Няма назначен разузнавач',
-              a.drone_tanker_name ? `Водоноска: ${a.drone_tanker_name} · ${a.drone_tanker_status}` : 'Няма изпратена водоноска',
+              `${new Date(a.created_at).toLocaleString('bg-BG')} · ${CITIZEN_ALERT_LABEL[a.status] ?? a.status}`,
+              a.drone_recon_name ? `Разузнавач: ${a.drone_recon_name} · ${DRONE_STATUS_LABEL[a.drone_recon_status] ?? a.drone_recon_status}` : 'Няма назначен разузнавач',
+              a.drone_tanker_name ? `Водоноска: ${a.drone_tanker_name} · ${DRONE_STATUS_LABEL[a.drone_tanker_status] ?? a.drone_tanker_status}` : 'Няма изпратена водоноска',
             ], CITIZEN_ALERT_COLOR[a.status])
           ))
           .addTo(m)
@@ -263,7 +276,7 @@ export default function OperationsPage() {
           .setPopup(new maplibregl.Popup({ offset: 10 }).setDOMContent(
             createPopup(d.name.replace('Реконс', 'Разузнаване'), [
               d.type === 'tanker' ? `Капацитет: ${d.capacity_l} л` : 'Разузнавателен',
-              `Статус: ${d.status}`,
+              `Статус: ${DRONE_STATUS_LABEL[d.status] ?? d.status}`,
               'Демо данни',
             ], DRONE_COLOR[d.status])
           ))
@@ -314,7 +327,7 @@ export default function OperationsPage() {
             <div key={a.id} className={`ops-card status-${a.status}`}>
               <div className="ops-card-header">
                 <strong>{a.tower_name}</strong>
-                <span className={`badge badge-${a.status}`}>{a.status}</span>
+                <span className={`badge badge-${a.status}`}>{STATUS_LABEL[a.status] ?? a.status}</span>
               </div>
               <p className="ops-meta">{Number(a.lat).toFixed(4)}, {Number(a.lon).toFixed(4)} · {Math.round(a.confidence * 100)}% увереност</p>
               <p className="ops-meta">{new Date(a.created_at).toLocaleString('bg-BG')}</p>
@@ -370,12 +383,12 @@ export default function OperationsPage() {
               <p className="ops-meta">{new Date(a.created_at).toLocaleString('bg-BG')}</p>
               <p className="ops-meta">
                 {a.drone_recon_name
-                  ? `Разузнавач: ${a.drone_recon_name} · ${a.drone_recon_status}`
+                  ? `Разузнавач: ${a.drone_recon_name} · ${DRONE_STATUS_LABEL[a.drone_recon_status] ?? a.drone_recon_status}`
                   : 'Чака свободен разузнавателен дрон'}
               </p>
               {a.drone_tanker_name && (
                 <p className="ops-meta">
-                  Водоноска: {a.drone_tanker_name} · {a.drone_tanker_status}
+                  Водоноска: {a.drone_tanker_name} · {DRONE_STATUS_LABEL[a.drone_tanker_status] ?? a.drone_tanker_status}
                 </p>
               )}
               <div className="ops-actions">
@@ -424,7 +437,7 @@ export default function OperationsPage() {
             <div key={d.id} className="ops-card">
               <div className="ops-card-header">
                 <strong className="icon-heading"><Icon name={DRONE_ICON[d.type] ?? 'drone'} size={16} /> {d.name.replace('Реконс', 'Разузнаване')}</strong>
-                <span className="badge" style={{ background: DRONE_COLOR[d.status] }}>{d.status}</span>
+                <span className="badge" style={{ background: DRONE_COLOR[d.status] }}>{DRONE_STATUS_LABEL[d.status] ?? d.status}</span>
               </div>
               {d.type === 'tanker' && <p className="ops-meta">Капацитет: {d.capacity_l}л</p>}
               {d.status !== 'idle' && (

@@ -24,11 +24,13 @@ from sklearn.metrics import roc_auc_score, precision_score, recall_score
 DATA_DIR = Path("data")
 ML_DIR   = Path("ml")
 
-# ── Представителни метео точки за наличния архив ────────────────────────────
+# ── Представителни метео точки — 0.5° мрежа, съвпадаща с updateForecasts ───
+# ВАЖНО: updateForecasts.ts ползва 0.5° мрежа. Обучаваме на същото разпределение,
+# за да няма train/serve skew.
 REP_POINTS = [
     (round(lat, 1), round(lon, 1))
-    for lat in np.arange(41.5, 44.1, 1.0)
-    for lon in np.arange(22.5, 28.6, 1.0)
+    for lat in np.arange(41.3, 44.2, 0.5)
+    for lon in np.arange(22.5, 28.6, 0.5)
 ]
 CELL_STEP = 0.1
 CELL_MIN_LAT, CELL_MAX_LAT = 41.24, 44.21
@@ -453,32 +455,37 @@ def real_precision(y_true, prediction, prevalence):
     return tpr * prevalence / denominator if denominator else 0
 
 
-def build_classifier(X_train, y_train, X_test, y_test):
-    positives = int((y_train == 1).sum())
-    negatives = int((y_train == 0).sum())
-    if not positives or not negatives:
+def build_classifier(X_train, y_train, X_val, y_val):
+    if not (y_train == 1).any() or not (y_train == 0).any():
         raise ValueError("Обучителната извадка трябва да има и двата класа")
+    # Не използваме scale_pos_weight — месечното семплиране (1:4) вече
+    # балансира класовете. Двойното претегляне сплесква праговете.
     model = lgb.LGBMClassifier(
         n_estimators=400,
         learning_rate=0.05,
         num_leaves=63,
         min_child_samples=20,
-        scale_pos_weight=negatives / positives,
         random_state=42,
         verbose=-1,
     )
     model.fit(
         X_train, y_train,
-        eval_set=[(X_test, y_test)],
+        eval_set=[(X_val, y_val)],
         callbacks=[lgb.early_stopping(40, verbose=False), lgb.log_evaluation(50)],
     )
     return model
 
 
 def train(df: pd.DataFrame):
-    train_mask = (df["date"] < "2024-01-01").to_numpy()
-    test_mask = ~train_mask
+    # Разделяне по ВРЕМЕ: обучение 2018-2021, validation 2022-2023, тест 2024
+    # Validation се ползва САМО за early stopping — не за избор на модел/прагове.
+    # Тест 2024 никога не влиза в обучението.
+    train_mask = (df["date"] < "2022-01-01").to_numpy()
+    val_mask   = ((df["date"] >= "2022-01-01") & (df["date"] < "2024-01-01")).to_numpy()
+    test_mask  = (df["date"] >= "2024-01-01").to_numpy()
     sampled_train = sample_month_matched_training_rows(df, train_mask)
+    # Validation за early stopping — семплирано, за да не е дисбалансирано
+    sampled_val = sample_month_matched_training_rows(df, val_mask)
     train_indices = np.flatnonzero(train_mask)
     calibration_indices = np.random.default_rng(42).choice(
         train_indices, size=min(200_000, len(train_indices)), replace=False
@@ -492,7 +499,8 @@ def train(df: pd.DataFrame):
 
     print(
         f"  Train natural: {int(train_mask.sum()):,} | "
-        f"Train sampled: {len(sampled_train):,} | Test: {len(test_df):,}"
+        f"Train sampled: {len(sampled_train):,} | "
+        f"Val sampled: {len(sampled_val):,} | Test: {len(test_df):,}"
     )
 
     fwi_test = test_df["fwi"].values
@@ -510,7 +518,7 @@ def train(df: pd.DataFrame):
     for name, features in FEATURE_SETS.items():
         model = build_classifier(
             sampled_train[features], sampled_train["fire"].values,
-            test_df[features], y_test,
+            sampled_val[features], sampled_val["fire"].values,
         )
         probabilities = model.predict_proba(test_df[features])[:, 1]
         natural_train_scores = model.predict_proba(calibration_natural[features])[:, 1]

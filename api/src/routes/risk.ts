@@ -29,11 +29,19 @@ const replayCache = new Map<string, { expiresAt: number; cells: ReplayCell[] }>(
  * Взима 30 дни предистория + целевата дата от Archive API (hourly).
  * Пресмята FWI серията за всяка точка и връща стойностите за целевия ден.
  */
+type ArchivePoint = {
+  temp: number; humidity: number; windSpeed: number; precip: number; fwiVal: number
+  ffmc: number; dmc: number; dc: number; isi: number; bui: number
+  fwiLag1: number; fwiLag2: number; fwiLag3: number
+  tempLag1: number; tempLag2: number; tempLag3: number
+  precipLag1: number; precipLag2: number; precipLag3: number
+}
+
 async function fetchArchiveBatch(
   points: { lat: number; lon: number }[],
   date: string
-): Promise<Map<string, { temp: number; humidity: number; windSpeed: number; precip: number; fwiVal: number }>> {
-  const result = new Map<string, { temp: number; humidity: number; windSpeed: number; precip: number; fwiVal: number }>()
+): Promise<Map<string, ArchivePoint>> {
+  const result = new Map<string, ArchivePoint>()
   const BATCH = 20   // по-малко за hourly (повече данни)
 
   const startDate = new Date(date)
@@ -69,15 +77,30 @@ async function fetchArchiveBatch(
       }))
       const series = fwiSeries(days, INITIAL_STATE)
       const last = days[days.length - 1]
-      const lastFwi = series[series.length - 1]
+      const n = series.length
+      const lastFwi = series[n - 1]
       return [{
         key: `${point.lat.toFixed(1)},${point.lon.toFixed(1)}`,
         weather: {
-          temp: last.temp,
-          humidity: last.rh,
+          temp:      last.temp,
+          humidity:  last.rh,
           windSpeed: last.wind,
-          precip: last.rain,
-          fwiVal: lastFwi.fwi,
+          precip:    last.rain,
+          fwiVal:    lastFwi.fwi,
+          ffmc:      lastFwi.ffmc,
+          dmc:       lastFwi.dmc,
+          dc:        lastFwi.dc,
+          isi:       lastFwi.isi,
+          bui:       lastFwi.bui,
+          fwiLag1:   n >= 2 ? series[n - 2].fwi : lastFwi.fwi,
+          fwiLag2:   n >= 3 ? series[n - 3].fwi : lastFwi.fwi,
+          fwiLag3:   n >= 4 ? series[n - 4].fwi : lastFwi.fwi,
+          tempLag1:  n >= 2 ? days[n - 2].temp  : last.temp,
+          tempLag2:  n >= 3 ? days[n - 3].temp  : last.temp,
+          tempLag3:  n >= 4 ? days[n - 4].temp  : last.temp,
+          precipLag1: n >= 2 ? days[n - 2].rain : last.rain,
+          precipLag2: n >= 3 ? days[n - 3].rain : last.rain,
+          precipLag3: n >= 4 ? days[n - 4].rain : last.rain,
         },
       }]
     })
@@ -108,22 +131,23 @@ function nearestWeather<T>(
   return best ? weatherMap.get(best) : undefined
 }
 
+/**
+ * Нормализира risk_level: пази оригиналния от базата (от модела/updateForecasts),
+ * а само ако е null — пада back на FWI прага.
+ * НЕ презаписва валиден risk_level с FWI логика.
+ */
 function normalizeRiskLevels<T extends {
   fwi: number | null
   risk_level: string | null
   explanation?: string | null
 }>(rows: T[]) {
-  const labels = { low: 'Нисък', moderate: 'Умерен', high: 'Висок', extreme: 'Екстремен' }
   return rows.map(row => {
     const fwi = row.fwi ?? 0
-    const risk_level = fwiToRiskLevel(fwi)
-    const explanation = row.explanation?.replace(/ \(модел: \d+%\)$/, '')
-      .replace(/^(Нисък|Умерен|Висок|Екстремен) риск \(FWI [^)]+\)/,
-        `${labels[risk_level]} риск (FWI ${fwi.toFixed(1)})`)
+    // Пазим risk_level от базата; само при null падаме back на FWI
+    const risk_level = row.risk_level ?? fwiToRiskLevel(fwi)
     return {
       ...row,
       risk_level,
-      ...(row.explanation == null ? {} : { explanation }),
     }
   })
 }
@@ -298,7 +322,11 @@ export default async function riskRoutes(app: FastifyInstance) {
 
     const features: ReplayCell[] = await Promise.all(cells.map(async cell => {
       const w = nearestWeather(cell.lat, cell.lon, weatherMap)
-        ?? { temp: 22, humidity: 50, windSpeed: 15, precip: 0, fwiVal: 8 }
+        ?? { temp: 22, humidity: 50, windSpeed: 15, precip: 0, fwiVal: 8,
+             ffmc: 85, dmc: 6, dc: 15, isi: 0, bui: 0,
+             fwiLag1: 8, fwiLag2: 8, fwiLag3: 8,
+             tempLag1: 22, tempLag2: 22, tempLag3: 22,
+             precipLag1: 0, precipLag2: 0, precipLag3: 0 }
 
       const pred = await predictRisk({
         temp:      w.temp,
@@ -309,6 +337,20 @@ export default async function riskRoutes(app: FastifyInstance) {
         doy,
         veg_type:  cell.veg_type,
         fwi_override: w.fwiVal,
+        ffmc: w.ffmc,
+        dmc:  w.dmc,
+        dc:   w.dc,
+        isi:  w.isi,
+        bui:  w.bui,
+        fwi_lag1: w.fwiLag1,
+        fwi_lag2: w.fwiLag2,
+        fwi_lag3: w.fwiLag3,
+        temp_lag1: w.tempLag1,
+        temp_lag2: w.tempLag2,
+        temp_lag3: w.tempLag3,
+        precip_lag1: w.precipLag1,
+        precip_lag2: w.precipLag2,
+        precip_lag3: w.precipLag3,
       })
       return {
         id:          cell.id,

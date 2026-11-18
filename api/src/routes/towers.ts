@@ -71,10 +71,12 @@ export default async function towerRoutes(app: FastifyInstance) {
   app.patch('/alerts/:id', async (req, reply) => {
     const user = req.user as { id: number; email: string }
     const { id } = req.params as { id: string }
-    const { status } = req.body as { status: string }
-    const valid = ['pending', 'confirmed', 'false_alarm', 'extinguished']
-    if (!valid.includes(status))
-      return reply.status(400).send({ error: 'Невалиден статус' })
+    const TowerAlertStatusSchema = z.object({
+      status: z.enum(['pending', 'confirmed', 'false_alarm', 'extinguished']),
+    })
+    const parsed = TowerAlertStatusSchema.safeParse(req.body)
+    if (!parsed.success) return reply.status(400).send({ error: 'Невалиден статус' })
+    const { status } = parsed.data
 
     const updated = await sql.begin(async tx => {
       const [alert] = await tx`
