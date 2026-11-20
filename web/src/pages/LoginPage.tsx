@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/authContext'
 import axios from 'axios'
 import { Icon } from '../components/Icon'
 import ThemeToggle from '../components/ThemeToggle'
+import { isAdminHost, getPublicMapUrl } from '../utils/hosts'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -60,16 +61,28 @@ export default function LoginPage() {
           <button type="submit">Вход</button>
         </form>
 
-        {/* Връзка назад към картата */}
-        <Link
-          to="/map"
-          style={{
-            display: 'block', marginTop: '1.25rem',
-            color: 'var(--muted)', textDecoration: 'none', fontSize: '0.85rem'
-          }}
-        >
-          ← Назад към картата
-        </Link>
+        {/* Връзка назад към картата — ако сме на admin домейна, води към публичния домейн */}
+        {isAdminHost() ? (
+          <a
+            href={getPublicMapUrl()}
+            style={{
+              display: 'block', marginTop: '1.25rem',
+              color: 'var(--muted)', textDecoration: 'none', fontSize: '0.85rem'
+            }}
+          >
+            ← Назад към картата
+          </a>
+        ) : (
+          <Link
+            to="/map"
+            style={{
+              display: 'block', marginTop: '1.25rem',
+              color: 'var(--muted)', textDecoration: 'none', fontSize: '0.85rem'
+            }}
+          >
+            ← Назад към картата
+          </Link>
+        )}
       </div>
     </div>
   )

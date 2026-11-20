@@ -28,6 +28,14 @@ export default async function droneRoutes(app: FastifyInstance) {
   })
 
   // ── POST /dispatch/recon ─────────────────────────────────────────────────
+  //
+  // Конкурентен достъп: FOR UPDATE SKIP LOCKED.
+  //   При едновременни заявки за изпращане (напр. два диспечера кликват
+  //   едновременно) обикновеното SELECT би върнало един и същ свободен дрон
+  //   и на двете транзакции. FOR UPDATE заключва избрания ред, а SKIP LOCKED
+  //   кара втората транзакция да прескочи заключения ред, вместо да чака —
+  //   така тя или намери следващия свободен дрон, или върне 409.
+  //   Транзакцията гарантира, че заключването и UPDATE-ът са атомарни.
   app.post('/dispatch/recon', async (req, reply) => {
     const body = z.object({ tower_alert_id: z.number().int().positive() }).safeParse(req.body)
     if (!body.success) return reply.status(400).send({ error: 'Невалиден tower_alert_id' })
@@ -218,6 +226,10 @@ export default async function droneRoutes(app: FastifyInstance) {
   })
 
   // ── POST /dispatch/tanker ─────────────────────────────────────────────────
+  // Вж. коментара при dispatch/recon за обяснение на FOR UPDATE SKIP LOCKED.
+  // Водоноска се изпраща само към ПОТВЪРДЕН пожар — диспечерът трябва първо
+  // да потвърди сигнала от кулата, преди да изпрати танк. Това предотвратява
+  // изпращане на скъп ресурс към фалшива тревога.
   app.post('/dispatch/tanker', async (req, reply) => {
     const body = z.object({ tower_alert_id: z.number().int().positive() }).safeParse(req.body)
     if (!body.success) return reply.status(400).send({ error: 'Невалиден tower_alert_id' })
@@ -323,9 +335,19 @@ export default async function droneRoutes(app: FastifyInstance) {
 }
 
 /**
- * Симулира движението на дрон по права линия.
- * en_route (10s) → inspecting/firefighting (8s) → returning (10s) → idle
- * Обновява current_geom на всяка секунда.
+ * Симулира движението на дрон по права линия в три фази:
+ *   1. en_route: интерполира позицията от базата към целта за MOVE_STEPS секунди.
+ *   2. inspecting/firefighting: стои на целта MISSION_DURATION ms.
+ *   3. returning: интерполира обратно към базата.
+ *
+ * Защо setInterval, а не WebSocket?
+ *   Позицията се записва в базата на всяка секунда. Клиентът прави polling
+ *   на /drones на всеки 5 секунди и получава последната позиция. WebSocket
+ *   би бил по-ефективен за реално движение, но polling е достатъчен за
+ *   симулационни дронове и опростява архитектурата.
+ *
+ * При грешка в UPDATE (напр. DB рестарт) дронът остава в последната записана
+ * позиция, а след API рестарт recoverDrones.ts го връща в idle.
  */
 export function startDroneAnimation(
   droneId: number,

@@ -273,6 +273,9 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
     left: 0.5rem; width: auto; max-width: none;
     padding: 0.5rem 0.7rem; border-radius: 10px;
     z-index: 10;
+    /* Ограничение на височината при разгъната легенда — не застъпва toolbar-а */
+    max-height: 45vh;
+    overflow-y: auto;
   }
   .legend h3 { font-size: 0.72rem; }
   .legend-item { font-size: 0.72rem; min-height: 22px; }

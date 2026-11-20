@@ -190,6 +190,12 @@ export default function MapPage() {
   }, [theme])
 
   // ── Клетки ───────────────────────────────────────────────────────────────
+  // MapLibre GeoJSON слой. При всяка промяна на данните (live/replay/тема)
+  // проверяваме дали source вече съществува:
+  //   - Ако да: setData() — само обновяваме данните, без да пресъздаваме слоевете.
+  //   - Ако не: addSource + addLayer — при първо зареждане или смяна на темата.
+  // moveLayer('firms-fires-points') пази пожарните точки над клетките,
+  // защото MapLibre рисува слоевете в реда на добавяне.
   useEffect(() => {
     const map = mapInstance.current
     if (!map || !cells?.length) return
@@ -624,7 +630,7 @@ export default function MapPage() {
       {mode === 'replay' && (replayFetching || firesFetching) && (
         <div className="replay-loading">
           <div className="loading-spinner" />
-          <span>Зареждам исторически данни от Open-Meteo Archive...</span>
+          <span>Зареждам исторически данни от Open-Meteo…</span>
         </div>
       )}
 

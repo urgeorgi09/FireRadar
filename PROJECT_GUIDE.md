@@ -59,7 +59,7 @@ ML pipeline (ръчно стартиране)
 - **Proxy:** Caddy зад Cloudflare Tunnel; Caddy приема HTTP на вътрешен порт 80, а Nginx е вътре в web контейнера за SPA и локално препращане към API.
 - **Оркестрация:** Docker Compose.
 
-## 3. Пътища, hostnames и deployment състояние
+## 3. Пътища, имена на домейни и състояние на публикуването
 
 Планираните production адреси са:
 
@@ -69,7 +69,7 @@ ML pipeline (ръчно стартиране)
 
 Съответната конфигурация е подготвена във [Caddyfile](./Caddyfile) и [docker-compose.yml](./docker-compose.yml). Compose файлът няма `production` профил: `caddy` и `cloudflared` са услуги по подразбиране, а локалното разработване може да стартира само избраните `db`, `api` и `web` услуги. Caddy слуша на вътрешен HTTP порт 80; публичният HTTPS се прекратява от Cloudflare.
 
-Файловете в хранилището не доказват дали DNS, Cloudflare Tunnel, сървърът или услугите са активни. Проверявай ги отделно преди да обявиш deployment за работещ.
+Файловете в хранилището не доказват дали DNS, Cloudflare Tunnel, сървърът или услугите са активни. Проверявай ги отделно преди да обявиш публикуването за успешно.
 
 Compose изисква `JWT_SECRET`, `POSTGRES_PASSWORD` и `TUNNEL_TOKEN` от root `.env`; не записвай реални стойности в Git или документацията. При вече създаден PostgreSQL volume смяната на `POSTGRES_PASSWORD` в `.env` не сменя автоматично паролата на ролята в базата.
 
@@ -108,7 +108,7 @@ Compose изисква `JWT_SECRET`, `POSTGRES_PASSWORD` и `TUNNEL_TOKEN` от 
 4. При стартиране и на всеки час `importRecentFires.ts` изтегля последните два дни от NASA FIRMS VIIRS NRT за Suomi-NPP, NOAA-20 и NOAA-21. Изисква `FIRMS_MAP_KEY`, има 20-секунден timeout и до три опита за всеки продукт, пропуска невалидни/нискоуверени редове, филтрира по границата на България и дедупликира по стабилен `source_id`. Наличието на ключ не гарантира точки: endpoint-ът връща само реалните засичания за района и периода.
 5. `GET /risk/fires/:date` връща историческите засичания, `GET /risk/fires/top-date` избира най-активната replay дата, а `GET /risk/fires/recent` връща последните 48 часа за живата карта.
 6. Живият слой се обновява на всеки пет минути и е надписан „Спътникови засичания, не потвърдени пожари“. FIRMS отказът се логва, но не спира API.
-7. FIRMS е satellite hotspot detection; засичането само по себе си не е потвърден горски пожар.
+7. FIRMS засича термични аномалии от сателит; засичането само по себе си не е потвърден горски пожар.
 
 ### Прогноза и риск
 
@@ -209,7 +209,7 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 
 | Файл/папка | Предназначение |
 |---|---|
-| [README.md](./README.md) | Стартиране, домейн план, env променливи, deployment указания и създаване на защитени екипни акаунти. |
+| [README.md](./README.md) | Стартиране, домейн план, env променливи, указания за публикуване и създаване на защитени екипни акаунти. |
 | [DONEWORK.md](./DONEWORK.md) | Статус на по-ранния план от шест блока и отметнати/оставащи задачи. |
 | [PROJECT_GUIDE.md](./PROJECT_GUIDE.md) | Настоящият архитектурен и файл-по-файл справочник. |
 | [Caddyfile](./Caddyfile) | Reverse proxy към API/docs/web на вътрешен HTTP порт 80; публичният HTTPS се прекратява от Cloudflare Tunnel. |
@@ -258,7 +258,7 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 | [api/src/jobs/recoverDrones.ts](./api/src/jobs/recoverDrones.ts) | При API старт връща незавършените симулационни дрон мисии в `idle` и ги позиционира обратно в базата. |
 | [api/src/services/fwi.ts](./api/src/services/fwi.ts) | TypeScript реализация на FWI компонентите, дневна памет, FWI class thresholds и обяснение на български. |
 | [api/src/services/model.ts](./api/src/services/model.ts) | Зарежда ONNX + model metadata; feature mapping, score/classification, explanation и FWI fallback. |
-| [api/src/services/openMeteo.ts](./api/src/services/openMeteo.ts) | Retry/backoff/timeout за Open-Meteo Archive fetch. |
+| [api/src/services/openMeteo.ts](./api/src/services/openMeteo.ts) | Повторни опити, изчакване и таймаут за заявки към Open-Meteo Archive. |
 | [api/src/services/bulgariaBoundary.ts](./api/src/services/bulgariaBoundary.ts) | Зарежда и валидира boundary GeoJSON от local data или `/app/data`. |
 | [api/src/services/turnstile.ts](./api/src/services/turnstile.ts) | Server-side Cloudflare Turnstile Siteverify HTTP call; provider failure става грешка, не успешна CAPTCHA. |
 | `api/src/services/*.test.ts` | Unit тестове за FWI, ONNX/model score и fallback, Open-Meteo retry поведението и Turnstile success/failure/provider error. |
@@ -315,7 +315,7 @@ PostGIS геометрии са в SRID 4326; spatial индекси се изп
 | `ml/fire_risk.onnx` | Компилираният бинарен LightGBM модел за API inference. Не е изходен код; преобучаването го заменя. |
 | `data/bulgaria_boundary.geojson` | Българска административна граница. |
 | `data/clc2018_bgr.geojson` | CORINE полигони за България; около 399 MB, нужен е за land-cover spatial classification. |
-| `data/firms_bulgaria_2018_2025.csv` | FIRMS hotspot записи; около 5.2 MB, използва се от importer и ML training. |
+| `data/firms_bulgaria_2018_2025.csv` | Термични засичания от FIRMS; около 5.2 MB, използва се от вносителя и ML обучението. |
 | `data/meteo_2018_2024.csv` | Open-Meteo Archive training cache; около 2.1 MB. |
 | `data/clc_per_point.json` | Компактен lookup кеш за CLC клас към представителна точка. |
 | `data/clc_polygon_centroids.json` | Игнориран кеш за центроидите на CLC полигони, използван при клетъчното обучение. |
@@ -365,7 +365,7 @@ Build/test командите не потвърждават DNS, Cloudflare Tunn
 11. **Demo seed.** Кули/дронове са начални симулационни записи; интерфейсът маркира демо данните.
 12. **Миграции и тестове.** Идемпотентното migration ядро има PostgreSQL integration test, който създава изолирана схема и изпълнява миграциите два пъти. Той се пропуска без `MIGRATION_TEST_DATABASE_URL`; текущият CI не подава тази променлива, въпреки че отделният job стартира PostGIS.
 13. **Docker build context.** Root `.dockerignore` и `web/.dockerignore` вече изключват тайни, зависимости, build output и големите runtime данни от контекстите.
-14. **Compose topology.** Caddy е с Docker IP `172.30.0.2`, който е единственият подразбиран trusted proxy. При deployment провери subnet конфликт и че Caddy предава адреса от `CF-Connecting-IP`; не настройвай доверие към всички proxy адреси.
+14. **Топология на Compose.** Caddy е с Docker IP `172.30.0.2`, единственият доверен прокси адрес. При публикуване провери конфликт на подмрежа и че Caddy предава адреса от `CF-Connecting-IP`; не настройвай доверие към всички прокси адреси.
 15. **Голям geodata файл.** CORINE GeoJSON е ~399 MB и се монтира read-only в API; сървърът пак трябва да има файла и достатъчно място.
 16. **Тайни и Docker контекст.** Не включвай `.env` файлове или ключове в Git/image-ите. Root ignore файловете изключват локални secrets от build контекстите; ако тайна е била публикувана или включена в image, ротирай я и провери историята на действителното Git хранилище.
 17. **Относителен риск и FIRMS актуалност.** Моделът е на същата 0.1° клетъчна резолюция като картата, но score-ът не е калибрирана вероятност. Историческият CSV свършва през 2025 г.; отделният NRT job обновява засичанията от последните два дни, когато `FIRMS_MAP_KEY` е зададен.
@@ -377,7 +377,7 @@ Build/test командите не потвърждават DNS, Cloudflare Tunn
 ### Етап A — Преди production разгръщане
 
 1. Потвърди кой сървър ще се използва, неговата OS/архитектура, наличното място и изходящата мрежова свързаност за Cloudflare Tunnel; публичен входящ IP не е задължителен за този модел.
-2. Направи отделен deployment `.env` на сървъра. Генерирай нова силна `JWT_SECRET` и `POSTGRES_PASSWORD`; никога не използвай стойности от локалния `.env`.
+2. Направи отделен `.env` на сървъра за публикуване. Генерирай нова силна `JWT_SECRET` и `POSTGRES_PASSWORD`; никога не използвай стойности от локалния `.env`.
 3. Ако пренасяш съществуваща DB volume, направи dump/backup и смени PostgreSQL role password контролирано преди да смениш API connection string-а.
 4. Ротирай всяка тайна, за която има съмнение, че е била изложена. Задай `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `DISPATCHER_EMAIL`, `DISPATCHER_PASSWORD` и изпълни `npm run provision:users` през API контейнера. Съществуващите екипни акаунти ще бъдат обновени, legacy citizen seed-ът ще бъде изтрит; не създавай публичен граждански login.
 5. Създай Turnstile site и secret keys за exact hostnames `fireradar-bg.org`, `www.fireradar-bg.org` и `admin.fireradar-bg.org`; запиши ги като server secrets.
@@ -408,7 +408,7 @@ Build/test командите не потвърждават DNS, Cloudflare Tunn
 2. Добави uptime/health monitoring, alerting за API/db/container restarts, disk space и forecast job failure.
 3. Определи retention policy за alerts, raw geodata, logs и audit entries.
 4. Свържи `MIGRATION_TEST_DATABASE_URL` към PostGIS service в CI, така че migration integration test-ът реално да се изпълнява; добавяй бъдещите промени по номериран ред.
-5. Access token още е в `localStorage`; планирай httpOnly refresh cookie и завърши threat-model review преди публичния deployment.
+5. Токенът за достъп все още е в `localStorage`; планирай httpOnly refresh бисквитка и завърши прегледа на модела за заплахи преди публичното публикуване.
 6. Направи Git secret scan от действителното репозитори и ротирай всички ключове, които са били committed или попаднали в стар image.
 7. Разшири тестовете с k6 натоварване, dependency/security review и браузърни CSP проверки; API/web CI build, lint, tests и Docker builds вече са добавени.
 8. Преобучаването на ниво клетка-ден е завършено; следващо е повторно обучение при нови данни и проверка на дрейфа, като навсякъде се запазва надписът „относителен риск“.
